@@ -101,6 +101,7 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1.25rem;
 
 .ring.locked .cell { color: var(--green); text-shadow: 0 0 4px var(--green), 0 0 14px var(--green); }
 .ring.locked button { visibility: hidden; }
+.ring.locked:focus-visible::before { filter: drop-shadow(0 0 3px var(--magenta)) drop-shadow(0 0 8px var(--magenta)); }
 .ring.locked::before {
   content: '🔒';
   position: absolute;

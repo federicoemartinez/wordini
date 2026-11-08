@@ -16,6 +16,7 @@ try {
 
 let lang, puzzle, game;
 let selected = 0;
+let loadSeq = 0; // solo la última carga pedida puede tocar la pantalla
 
 const locked = i => game.attempts.some(a => a[i]);
 const alreadyTried = () => game.tried.includes(game.offsets.join(''));
@@ -26,7 +27,9 @@ function pickLang() {
 }
 
 async function start(newLang) {
+  const seq = ++loadSeq;
   lang = newLang;
+  clearBoard(); // mientras carga no hay partida: nada puede guardarse con la clave de otro idioma
   set(storage, 'wordini:lang', lang);
   document.documentElement.lang = lang;
   $('#lang').value = lang;
@@ -35,12 +38,10 @@ async function start(newLang) {
   try {
     words = await (await fetch(`words/${lang}.json`)).json();
   } catch {
-    game = puzzle = undefined; // nunca guardar la partida de un idioma con la clave de otro
-    $('#lock').replaceChildren();
-    $('#message').textContent = t(lang, 'loadError');
+    if (seq === loadSeq) $('#message').textContent = t(lang, 'loadError');
     return;
   }
-  if (lang !== newLang) return; // el jugador cambió de idioma mientras cargaba
+  if (seq !== loadSeq) return; // el jugador cambió de idioma mientras cargaba
   const day = dayNumber();
   puzzle = createPuzzle(lang, day, words);
   game = loadGame(storage, lang, day);
@@ -48,6 +49,16 @@ async function start(newLang) {
   if (game.status === 'lost') game.offsets = puzzle.reveal().offsets;
   renderLock();
   renderStatus();
+}
+
+function clearBoard() {
+  game = puzzle = undefined;
+  $('#lock').replaceChildren();
+  $('#lock').className = '';
+  $('#history').replaceChildren();
+  $('#message').textContent = '';
+  $('#btn-open').textContent = t(lang, 'open');
+  $('#btn-open').disabled = true;
 }
 
 function renderTexts() {
@@ -152,10 +163,11 @@ function finish(won) {
 
 // Derrota: los anillos giran paso a paso hasta la solución (o saltan si se pidió menos movimiento).
 async function spinTo(target) {
-  while (game.offsets.some((o, i) => o !== target[i])) {
-    game.offsets.forEach((o, i) => {
+  const g = game; // si el jugador cambia de idioma a mitad del giro, se corta
+  while (game === g && g.offsets.some((o, i) => o !== target[i])) {
+    g.offsets.forEach((o, i) => {
       if (o === target[i]) return;
-      game.offsets[i] = (o + 1) % RING;
+      g.offsets[i] = (o + 1) % RING;
       renderRing(i, 1);
     });
     if (!calm) await new Promise(r => setTimeout(r, 90));
@@ -216,7 +228,7 @@ async function share() {
 
 function onKey(e) {
   if (!game || document.querySelector('dialog[open]') || e.target.tagName === 'SELECT') return;
-  if (e.key === 'Enter' && e.target.tagName === 'BUTTON') return; // el botón ya recibe el click
+  if (e.key === 'Enter' && e.target.closest('a, button')) return; // links y botones ya reciben su click
   const actions = {
     ArrowLeft: () => ringEl((selected + COLS - 1) % COLS).focus(),
     ArrowRight: () => ringEl((selected + 1) % COLS).focus(),
