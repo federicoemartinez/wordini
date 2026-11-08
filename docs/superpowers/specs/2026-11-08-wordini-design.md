@@ -76,7 +76,7 @@ Para agregar un idioma: correr el script de datos con sus fuentes, agregar sus t
   - `en/en_US.dic`;
   - `fr_FR/dictionaries/fr.dic` (MPL 2.0).
 - **Lista de bloqueo:** "List of Dirty, Naughty, Obscene and Otherwise Bad Words" (LDNOOBW, CC BY 4.0), archivos `es`, `en`, `fr`. Se guarda en `tools/blocklist/{lang}.txt` y se puede editar a mano.
-- Las atribuciones de licencias van en `CREDITS.md` y en un enlace del pie del sitio.
+- Las atribuciones de licencias van en `CREDITS.md` y en un enlace del pie del sitio. `words/*.json` deriva de datos de `wordfreq`, así que se distribuye bajo CC BY-SA 4.0.
 
 ### 3.3 Normalización (por palabra)
 
@@ -96,7 +96,9 @@ Para agregar un idioma: correr el script de datos con sus fuentes, agregar sus t
   - no están en la lista de bloqueo;
   - están en `valid`.
 
-  De las candidatas que cumplen esas condiciones se toman las 2.000 con mayor frecuencia en `wordfreq`. La raíz se normaliza antes de comparar.
+  De las candidatas que cumplen esas condiciones se toman las 1.200 con mayor frecuencia en `wordfreq`. La raíz se normaliza antes de comparar.
+
+  El corte en 1.200 sale de medirlo: alrededor de la posición 1.200 las palabras siguen siendo conocidas (MANSO, POLEN, INBOX, BISON). A partir de 1.500 aparecen rarezas (SALMA, LABBE, TATER).
 - **Salida:** `words/{lang}.json` = `{ "alphabet": "...", "answers": [...], "valid": [...] }`, con las listas ordenadas alfabéticamente.
   - El orden importa: el generador depende de él para ser determinista.
   - Cambiar las listas cambia los puzzles futuros. Se acepta: los puzzles pasados no importan.
@@ -187,7 +189,7 @@ La solución vive en el closure. No se exporta como dato.
 - **Arrastre vertical** sobre un anillo, con pointer events. Cada vez que el arrastre recorre la altura de una letra, el anillo avanza un paso. Al soltar, el anillo encaja en la letra más cercana.
 - **Botones ▲▼** en cada anillo.
 - **Teclado:**
-  - ←/→ eligen el anillo, que se marca con foco visible;
+  - ←/→ eligen el anillo. El anillo con foco de teclado (`:focus-visible`) muestra sus flechas en magenta;
   - ↑/↓ lo giran;
   - Enter es Abrir.
 - Los anillos trabados ignoran todos los controles.
@@ -208,7 +210,7 @@ La solución vive en el closure. No se exporta como dato.
 - **Brillo:** `text-shadow` y `box-shadow` apilados: 2–3 sombras del mismo color, cada una más difusa.
 - **Anillos:**
   - son tiras 2D movidas con `transform: translateY` y una transición con un leve rebote;
-  - `mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent)` desvanece las filas de los extremos;
+  - `mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent)` desvanece las filas de los extremos y deja las 3 de la ventana nítidas;
   - un degradado superpuesto simula la curvatura de un cilindro.
 - **Anillo trabado:** borde y letras en `--green` con brillo, y un ícono 🔒 sobre el anillo. El estado no depende solo del color.
 - **Victoria:**
@@ -216,9 +218,9 @@ La solución vive en el closure. No se exporta como dato.
   - suena la apertura;
   - `canvas-confetti` 1.9.4 (ISC) dispara confetti con los colores de la paleta. Se importa como módulo ES desde jsDelivr, con la versión fijada.
 - **Sonidos:**
-  - clic al pasar cada letra, clack al tocar Abrir, apertura al ganar;
-  - archivos `.ogg` del pack "Interface Sounds" de Kenney (CC0), en `sounds/`;
-  - se reproducen con `new Audio()`;
+  - clic al pasar cada letra, clack al tocar Abrir, arpegio al ganar y descenso al perder;
+  - se sintetizan con Web Audio (osciladores cuadrada, triangular y diente de sierra, estilo chiptune). No hay archivos de audio ni licencias que atribuir.
+  - El `AudioContext` se crea o reanuda en un gesto del usuario (`pointerdown` o `keydown`), porque los navegadores bloquean el audio sin gesto;
   - el botón de silencio guarda su estado.
 - **Vibración:** `navigator.vibrate(10)` al pasar cada letra, solo donde existe (Android).
 - **`prefers-reduced-motion: reduce`:** sin confetti, sin rebote y sin animación de la derrota (los anillos saltan directo a la solución).
@@ -251,8 +253,9 @@ Al cambiar de idioma:
 | `wordini:lang` | último idioma elegido |
 | `wordini:muted` | `true`/`false` |
 | `wordini:help-seen` | `true` después de la primera visita |
-| `wordini:{lang}` | `{ day, offsets, attempts: boolean[][], status: "playing"\|"won"\|"lost", stats }` |
+| `wordini:{lang}` | `{ day, offsets, attempts: boolean[][], tried: string[], status: "playing"\|"won"\|"lost", stats }` |
 
+- **`tried`:** las combinaciones ya intentadas como texto (por ejemplo `"30517"`). Sirve para deshabilitar Abrir ante una combinación repetida (§2.3).
 - **`stats`:** `{ played, won, streak, maxStreak, lastWinDay, dist: [6 números] }`.
 - **Racha:**
   - una victoria en el día `d` con `lastWinDay === d-1` suma 1 a la racha; si no, la racha pasa a 1;
@@ -286,6 +289,8 @@ Se corren con `node --test` (incluido en Node, sin dependencias):
     - fechas consecutivas dan días consecutivos, también alrededor de los cambios de horario (se prueba con `TZ=America/New_York` y `TZ=Europe/Paris`);
     - 23:59 y 00:01 caen en días distintos.
 - **`test/share.test.js`:** el texto para compartir es el esperado para una victoria en 1 intento, una en 3 y una derrota.
+- **`test/state.test.js`:** reglas de racha, restauración y descarte de la partida guardada, partidas separadas por idioma, y `localStorage` roto o ausente sin errores.
+- **`test/i18n.test.js`:** todos los idiomas tienen las mismas claves que el inglés, y cada idioma tiene bandera.
 - **`tools/build_words.py`:** autochequeo con `assert` al final de cada ejecución:
   - todas las palabras tienen 5 letras del alfabeto del idioma;
   - `answers` está incluido en `valid`;
@@ -308,16 +313,18 @@ Para que la lógica del texto compartido se pueda testear sin el DOM, `js/share.
 ```
 index.html
 style.css
-js/main.js        # UI, eventos, estado, sonido, modales
+js/main.js        # UI, eventos, modales
 js/puzzle.js      # PRNG, generación, check/reveal, dayNumber
 js/share.js       # shareText (pura)
+js/state.js       # localStorage tolerante a fallos, rachas (puro, testeable)
+js/fx.js          # sonido sintetizado, vibración, confetti
 js/i18n.js        # textos de la interfaz
 words/{es,en,fr}.json
-sounds/*.ogg
 tools/build_words.py
 tools/blocklist/{es,en,fr}.txt
-test/puzzle.test.js
-test/share.test.js
+test/{puzzle,share,state,i18n}.test.js
+package.json      # solo "type": "module" y el script de test
+README.md
 CREDITS.md
 ```
 
