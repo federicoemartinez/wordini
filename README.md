@@ -1,6 +1,6 @@
 # Wordini
 
-Puzzle diario de palabras: una cerradura de 5 anillos que hay que girar hasta que 3 filas formen 3 palabras. Funciona en español, inglés y francés. Es un sitio estático, sin backend y sin build.
+Juego de palabras: se arrastra por letras vecinas para armar palabras y hay que llegar a los puntos de cada nivel. Los niveles son infinitos y el nivel N es el mismo para todos. Funciona en español, inglés y francés. Es un sitio estático, sin backend y sin build.
 
 ## Jugar en local
 
@@ -25,17 +25,24 @@ tools/.venv/bin/python tools/build_words.py es en fr
 
 Cambiar las listas cambia las canchas a partir de ese momento.
 
+## Calibrar la dificultad
+
+Las perillas están al principio de `js/board.js`. Para ver cómo quedan los niveles:
+
+```bash
+node tools/levels.mjs es 1 50   # idioma, desde, hasta
+```
+
 ## Publicar
 
-1. En `js/puzzle.js`, poner en `LAUNCH_DATE` la fecha del primer deploy público, como `[año, mes 0-11, día]`. Ese día es el puzzle #1.
-2. Subir el repo a cualquier hosting estático, como GitHub Pages o Cloudflare Pages. Se publica la raíz tal cual.
+Subir el repo a cualquier hosting estático, como GitHub Pages o Cloudflare Pages. Se publica la raíz tal cual. Los dos sirven `words/*.json` comprimido (~1 MB en español).
 
-## Ver la solución mientras se desarrolla
+## Ver las palabras de una cancha mientras se desarrolla
 
 Abrir la consola de DevTools y ejecutar:
 
 ```js
-const { createPuzzle, dayNumber } = await import('/js/puzzle.js');
+const { createBoard } = await import('/js/board.js');
 const words = await (await fetch('/words/es.json')).json();
-createPuzzle('es', dayNumber(), words).reveal(); // { offsets, words }
+createBoard('es', 1, words).missed([]); // todas las palabras comunes del nivel 1
 ```

@@ -1,25 +1,27 @@
-import { createPuzzle, dayNumber, RING, COLS } from './puzzle.js';
-import { shareText } from './share.js';
+import { createBoard, pathFor, points } from './board.js';
+import { newProgress, play, score, step, wordOf } from './game.js';
+import { formatTime, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
-import { get, set, loadGame, saveGame, recordResult } from './state.js';
+import { get, set, loadGame, saveGame, sameBoard, sigOf } from './state.js';
 import * as fx from './fx.js';
 
-const MAX_ATTEMPTS = 6;
-const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = sel => document.querySelector(sel);
-const ringEl = i => $('#lock').children[i];
+const SVG = 'http://www.w3.org/2000/svg';
+const trail = document.createElementNS(SVG, 'svg');
+const line = trail.appendChild(document.createElementNS(SVG, 'polyline'));
+trail.id = 'trail';
 
 let storage;
 try {
   storage = localStorage;
 } catch {} // bloqueado: el juego funciona sin persistencia
 
-let lang, puzzle, game;
-let selected = 0;
+let lang, words, board, game;
+let path = []; // camino en curso, con el dedo o el teclado
+let typed = ''; // palabra escrita con el teclado
+let tracing = false;
+let since = null; // performance.now() desde que el reloj corre; null = parado
 let loadSeq = 0; // solo la última carga pedida puede tocar la pantalla
-
-const locked = i => game.attempts.some(a => a[i]);
-const alreadyTried = () => game.tried.includes(game.offsets.join(''));
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -28,37 +30,67 @@ function pickLang() {
 
 async function start(newLang) {
   const seq = ++loadSeq;
+  if (game) stopClock(); // guarda el tiempo con la clave del idioma que se deja
   lang = newLang;
-  clearBoard(); // mientras carga no hay partida: nada puede guardarse con la clave de otro idioma
+  board = game = undefined; // mientras carga no hay partida: nada puede guardarse con la clave de otro idioma
+  $('#board').replaceChildren();
+  $('#hud').hidden = $('#found-box').hidden = $('#btn-next').hidden = true;
   set(storage, 'wordini:lang', lang);
   document.documentElement.lang = lang;
   $('#lang').value = lang;
   renderTexts();
-  let words;
+  say(t(lang, 'loading'));
+  let loaded;
   try {
-    words = await (await fetch(`words/${lang}.json`)).json();
+    const res = await fetch(`words/${lang}.json`);
+    if (!res.ok) throw new Error(res.status);
+    loaded = await res.json();
   } catch {
-    if (seq === loadSeq) $('#message').textContent = t(lang, 'loadError');
+    if (seq === loadSeq) say(t(lang, 'loadError'));
     return;
   }
   if (seq !== loadSeq) return; // el jugador cambió de idioma mientras cargaba
-  const day = dayNumber();
-  puzzle = createPuzzle(lang, day, words);
-  game = loadGame(storage, lang, day);
-  game.offsets ??= [...puzzle.start];
-  if (game.status === 'lost') game.offsets = puzzle.reveal().offsets;
-  renderLock();
-  renderStatus();
+  words = loaded;
+  enterLevel(loadGame(storage, lang));
 }
 
-function clearBoard() {
-  game = puzzle = undefined;
-  $('#lock').replaceChildren();
-  $('#lock').className = '';
-  $('#history').replaceChildren();
-  $('#message').textContent = '';
-  $('#btn-open').textContent = t(lang, 'open');
-  $('#btn-open').disabled = true;
+function enterLevel(saved) {
+  board = createBoard(lang, saved.level, words);
+  game = sameBoard(saved, board) ? saved : { level: saved.level, sig: sigOf(board), ...newProgress(board) };
+  game.ms ??= 0; // partidas guardadas antes del reloj
+  saveGame(storage, lang, game);
+  path = [];
+  typed = '';
+  since = null;
+  if (game.ms > 0) startClock(); // venía jugando este nivel: retoma
+  renderBoard();
+  render();
+  say('');
+}
+
+// El reloj corre desde la primera letra del nivel hasta pasarlo, y solo con la pestaña a la vista.
+const elapsed = () => game.ms + (since === null ? 0 : performance.now() - since);
+
+function startClock() {
+  if (since === null && !game.passed && !document.hidden) since = performance.now();
+}
+
+// Pasa lo corrido a game.ms (lo que se guarda) sin parar el reloj.
+function syncClock() {
+  if (since === null) return;
+  const now = performance.now();
+  game.ms += now - since;
+  since = now;
+}
+
+function stopClock() {
+  syncClock();
+  since = null;
+  saveGame(storage, lang, game);
+}
+
+function renderClock() {
+  if (game) $('#time').textContent = `⏱ ${formatTime(elapsed())}`;
 }
 
 function renderTexts() {
@@ -69,146 +101,199 @@ function renderTexts() {
   }
 }
 
-function renderLock() {
-  $('#lock').replaceChildren(
-    ...puzzle.rings.map((_, i) => {
-      const ring = document.createElement('div');
-      ring.className = 'ring';
-      ring.tabIndex = 0;
-      ring.style.setProperty('--i', i);
-      ring.innerHTML =
-        '<button class="up" tabindex="-1" aria-hidden="true">▲</button>' +
-        '<div class="reel"><div class="strip"></div></div>' +
-        '<button class="down" tabindex="-1" aria-hidden="true">▼</button>';
-      ring.querySelector('.up').onclick = () => rotate(i, 1);
-      ring.querySelector('.down').onclick = () => rotate(i, -1);
-      ring.onfocus = () => (selected = i);
-      dragToRotate(ring.querySelector('.reel'), i);
-      return ring;
+function say(text, cls = '') {
+  $('#word').textContent = text;
+  $('#word').className = cls;
+}
+
+function renderBoard() {
+  const el = $('#board');
+  el.style.setProperty('--n', board.size);
+  el.replaceChildren(
+    ...board.letters.map((c, i) => {
+      const tile = Object.assign(document.createElement('div'), { className: 'tile', textContent: c });
+      tile.dataset.i = i;
+      return tile;
+    }),
+    trail,
+  );
+  for (const g of board.gold) {
+    el.children[g.cell].classList.add('gold');
+    el.children[g.cell].append(Object.assign(document.createElement('b'), { className: 'badge' }));
+  }
+  line.setAttribute('points', '');
+}
+
+function render() {
+  const pts = score(game.found);
+  $('#hud').hidden = $('#found-box').hidden = false;
+  $('#level').textContent = `${t(lang, 'level')} ${game.level}`;
+  $('#score').textContent = `${pts} / ${board.threshold}`;
+  $('#fill').style.width = `${Math.min(100, (100 * pts) / board.threshold)}%`;
+  $('#bar').classList.toggle('done', pts >= board.threshold);
+  $('#common').textContent = `${board.commonCount - board.missed(game.found).length}/${board.commonCount} ${t(lang, 'common')}`;
+  board.gold.forEach((g, k) => {
+    const tile = $('#board').children[g.cell];
+    tile.classList.toggle('done', game.goldLeft[k] === 0);
+    tile.querySelector('.badge').textContent = game.goldLeft[k] || '✓';
+  });
+  const lengths = [...new Set(game.found.map(w => w.length))].sort((a, b) => b - a);
+  $('#found-title').textContent = `${t(lang, 'found')} (${game.found.length})`;
+  $('#found').replaceChildren(
+    ...lengths.map(n => {
+      const p = document.createElement('p');
+      p.append(Object.assign(document.createElement('b'), { textContent: n }), game.found.filter(w => w.length === n).sort().join(' '));
+      return p;
     }),
   );
-  puzzle.rings.forEach((_, i) => renderRing(i, 0));
+  $('#btn-next').hidden = !game.passed;
+  renderClock();
 }
 
-// Muestra 5 letras: 1 arriba, las 3 de la ventana y 1 abajo. dir anima el paso (+1 sube, -1 baja).
-function renderRing(i, dir) {
-  const ring = ringEl(i);
-  const o = game.offsets[i];
-  const letters = [-1, 0, 1, 2, 3].map(k => puzzle.rings[i][(o + k + RING) % RING]);
-  const strip = ring.querySelector('.strip');
-  strip.replaceChildren(...letters.map(c => Object.assign(document.createElement('div'), { className: 'cell', textContent: c })));
-  ring.classList.toggle('locked', locked(i));
-  ring.setAttribute('aria-label', letters.slice(1, 4).join(' '));
-  if (dir && !calm) {
-    strip.animate([{ transform: `translateY(${dir * 20}%)` }, { transform: 'none' }], { duration: 140, easing: 'cubic-bezier(.3,1.6,.5,1)' });
+// Resalta el camino, dibuja la línea entre los centros de las casillas y muestra la palabra en curso.
+function renderPath() {
+  const tiles = [...$('#board').querySelectorAll('.tile')];
+  tiles.forEach((tile, i) => tile.classList.toggle('on', path.includes(i)));
+  const centers = path.map(i => `${tiles[i].offsetLeft + tiles[i].offsetWidth / 2},${tiles[i].offsetTop + tiles[i].offsetHeight / 2}`);
+  line.setAttribute('points', centers.join(' '));
+  if (path.length || typed) say(typed || wordOf(board, path), 'live');
+}
+
+function pop(text) {
+  const el = Object.assign(document.createElement('span'), { className: 'pop', textContent: text });
+  $('#bar').append(el);
+  setTimeout(() => el.remove(), 900);
+}
+
+const pendingGold = () => board.gold.filter((_, k) => game.goldLeft[k] > 0).map(g => g.cell);
+
+function submit(p) {
+  const word = wordOf(board, p);
+  const goldBefore = game.goldLeft.join();
+  const result = play(game, board, words, p);
+  path = [];
+  typed = '';
+  renderPath();
+  if (result === 'short') {
+    say(p.length > 1 ? t(lang, 'short') : '', 'short');
+    return;
   }
-}
-
-function rotate(i, dir) {
-  selected = i;
-  if (game.status !== 'playing' || locked(i)) return;
-  game.offsets[i] = (game.offsets[i] + dir + RING) % RING;
-  renderRing(i, dir);
-  fx.tick();
-  renderStatus();
+  if (result === 'invalid' || result === 'dup') {
+    say(`${word} · ${t(lang, result)}`, result);
+    fx.bad();
+    return;
+  }
+  if (result === 'cleared') stopClock();
+  else syncClock();
   saveGame(storage, lang, game);
-}
-
-// Cada vez que el arrastre recorre la altura de una letra, el anillo avanza un paso.
-function dragToRotate(reel, i) {
-  let y0 = null;
-  reel.onpointerdown = e => {
-    y0 = e.clientY;
-    reel.setPointerCapture(e.pointerId);
-    ringEl(i).focus({ preventScroll: true });
-  };
-  reel.onpointermove = e => {
-    if (y0 === null) return;
-    const cell = reel.offsetHeight / 5;
-    while (y0 - e.clientY >= cell) {
-      rotate(i, 1);
-      y0 -= cell;
-    }
-    while (e.clientY - y0 >= cell) {
-      rotate(i, -1);
-      y0 += cell;
-    }
-  };
-  reel.onpointerup = reel.onpointercancel = () => (y0 = null);
-}
-
-function open() {
-  if (!game || game.status !== 'playing' || alreadyTried()) return;
-  const result = puzzle.check(game.offsets);
-  game.attempts.push(result);
-  game.tried.push(game.offsets.join(''));
-  fx.clack();
-  if (result.every(Boolean)) finish(true);
-  else if (game.attempts.length === MAX_ATTEMPTS) finish(false);
-  saveGame(storage, lang, game);
-  puzzle.rings.forEach((_, i) => renderRing(i, 0));
-  renderStatus();
-}
-
-function finish(won) {
-  game.status = won ? 'won' : 'lost';
-  game.stats = recordResult(game.stats, game.day, won, game.attempts.length);
-  if (won) fx.win();
-  else {
-    fx.lose();
-    spinTo(puzzle.reveal().offsets);
-  }
-  setTimeout(showStats, 1500);
-}
-
-// Derrota: los anillos giran paso a paso hasta la solución (o saltan si se pidió menos movimiento).
-async function spinTo(target) {
-  const g = game; // si el jugador cambia de idioma a mitad del giro, se corta
-  while (game === g && g.offsets.some((o, i) => o !== target[i])) {
-    g.offsets.forEach((o, i) => {
-      if (o === target[i]) return;
-      g.offsets[i] = (o + 1) % RING;
-      renderRing(i, 1);
-    });
-    if (!calm) await new Promise(r => setTimeout(r, 90));
+  say(word, 'good');
+  pop(`+${points(word)}`);
+  fx.good(word.length);
+  if (game.goldLeft.join() !== goldBefore) fx.gold();
+  render();
+  if (result === 'cleared') {
+    fx.win();
+    const g = game;
+    setTimeout(() => game === g && showCleared(), 900); // si cambió de idioma mientras tanto, no se abre
   }
 }
 
-function renderStatus() {
-  const btn = $('#btn-open');
-  btn.textContent = `${t(lang, 'open')} · ${MAX_ATTEMPTS - game.attempts.length}`;
-  btn.disabled = game.status !== 'playing' || alreadyTried();
-  $('#lock').classList.toggle('won', game.status === 'won');
-  $('#lock').classList.toggle('lost', game.status === 'lost');
-  $('#history').replaceChildren(
-    ...game.attempts.map(a => {
-      const li = document.createElement('li');
-      li.setAttribute('aria-label', `${a.filter(Boolean).length}/${COLS}`);
-      li.innerHTML = a.map(ok => `<span class="sq${ok ? ' ok' : ''}"></span>`).join('');
-      return li;
-    }),
-  );
-  const over = game.status !== 'playing';
-  $('#message').textContent = over ? `${t(lang, game.status)} ${puzzle.reveal().words.join(' · ')}` : '';
+// Solo cuenta el círculo central de cada casilla: así una diagonal no agarra por error una vecina.
+function tileAt(x, y) {
+  const tile = document.elementFromPoint(x, y)?.closest('#board .tile');
+  if (!tile) return null;
+  const r = tile.getBoundingClientRect();
+  const dx = x - (r.left + r.width / 2);
+  const dy = y - (r.top + r.height / 2);
+  return dx * dx + dy * dy <= (0.36 * r.width) ** 2 ? Number(tile.dataset.i) : null;
 }
 
-function showStats() {
-  if (!game) return;
-  const s = game.stats;
-  const cells = [[s.played, 'played'], [s.played ? Math.round((100 * s.won) / s.played) : 0, 'winPct'], [s.streak, 'streak'], [s.maxStreak, 'maxStreak']];
-  $('#stats').innerHTML = cells.map(([n, key]) => `<div><b>${n}</b><small>${t(lang, key)}</small></div>`).join('');
-  const max = Math.max(1, ...s.dist);
-  const today = game.status === 'won' ? game.attempts.length - 1 : -1;
-  $('#dist').innerHTML = s.dist
-    .map((n, k) => `<div class="row"><span>${k + 1}</span><span class="bar${k === today ? ' today' : ''}" style="width:${(100 * n) / max}%">${n}</span></div>`)
-    .join('');
-  $('#btn-share').hidden = $('#next').hidden = game.status === 'playing';
-  $('#dlg-stats').showModal();
+function onPointerDown(e) {
+  const tile = e.target.closest('.tile');
+  if (!board || !tile) return;
+  $('#board').setPointerCapture(e.pointerId);
+  tracing = true;
+  typed = '';
+  path = [Number(tile.dataset.i)];
+  startClock();
+  fx.tick(1);
+  renderPath();
+}
+
+function onPointerMove(e) {
+  if (!tracing) return;
+  const i = tileAt(e.clientX, e.clientY);
+  if (i === null) return;
+  const next = step(path, i, board.size);
+  if (next === path) return;
+  if (next.length > path.length) fx.tick(next.length);
+  path = next;
+  renderPath();
+}
+
+function onPointerUp(e) {
+  if (!tracing) return;
+  tracing = false;
+  if (e.type === 'pointercancel') {
+    path = [];
+    renderPath();
+    say('');
+  } else submit(path);
+}
+
+const letterOf = key => {
+  if (key.length !== 1) return null;
+  const up = key.toUpperCase();
+  const c = up === 'Ñ' ? up : up.normalize('NFD')[0]; // É -> E, pero la Ñ queda
+  return words.alphabet.includes(c) ? c : null;
+};
+
+function onKey(e) {
+  if (!board || tracing || document.querySelector('dialog[open]') || e.target.tagName === 'SELECT') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Enter' && e.target.closest('a, button, summary')) return; // ya reciben su click
+  if (e.key === 'Enter') {
+    if (!typed) return;
+    const p = pathFor(typed, board.letters, pendingGold());
+    if (p) submit(p);
+    else {
+      say(`${typed} · ${t(lang, typed.length < 3 ? 'short' : 'invalid')}`, 'invalid');
+      fx.bad();
+      typed = '';
+      path = [];
+      renderPath();
+    }
+  } else if (e.key === 'Backspace') typed = typed.slice(0, -1);
+  else if (e.key === 'Escape') typed = '';
+  else if (letterOf(e.key)) {
+    typed += letterOf(e.key);
+    startClock();
+  } else return;
+  e.preventDefault();
+  if (e.key === 'Enter') return;
+  path = pathFor(typed, board.letters, pendingGold()) ?? [];
+  renderPath();
+  if (!typed) say('');
+}
+
+function showCleared() {
+  const missed = board.missed(game.found);
+  $('#clear-score').textContent = `${t(lang, 'level')} ${game.level} · ${score(game.found)} pts · ⏱ ${formatTime(game.ms)}`;
+  $('#missed').textContent = missed.join(' ');
+  $('#missed').hidden = true;
+  $('#btn-missed').hidden = !missed.length;
+  $('#dlg-clear').showModal();
+}
+
+function nextLevel() {
+  if (!game?.passed) return;
+  $('#dlg-clear').close();
+  enterLevel({ level: game.level + 1 });
 }
 
 async function share() {
   const url = `${location.origin}${location.pathname}?l=${lang}`;
-  const text = shareText(lang, game.day + 1, game.attempts, game.status === 'won', url);
+  const text = shareText(lang, game.level, score(game.found), game.ms, url);
   if (navigator.share) {
     try {
       await navigator.share({ text });
@@ -226,21 +311,6 @@ async function share() {
   }
 }
 
-function onKey(e) {
-  if (!game || document.querySelector('dialog[open]') || e.target.tagName === 'SELECT') return;
-  if (e.key === 'Enter' && e.target.closest('a, button')) return; // links y botones ya reciben su click
-  const actions = {
-    ArrowLeft: () => ringEl((selected + COLS - 1) % COLS).focus(),
-    ArrowRight: () => ringEl((selected + 1) % COLS).focus(),
-    ArrowUp: () => rotate(selected, 1),
-    ArrowDown: () => rotate(selected, -1),
-    Enter: open,
-  };
-  if (!actions[e.key]) return;
-  e.preventDefault();
-  actions[e.key]();
-}
-
 function renderMute() {
   $('#btn-mute').textContent = fx.muted ? '🔇' : '🔊';
 }
@@ -251,9 +321,12 @@ renderMute();
 await start(pickLang());
 
 $('#lang').onchange = e => start(e.target.value);
-$('#btn-open').onclick = open;
+$('#board').onpointerdown = onPointerDown;
+$('#board').onpointermove = onPointerMove;
+$('#board').onpointerup = $('#board').onpointercancel = onPointerUp;
+$('#btn-next').onclick = $('#btn-next-dlg').onclick = nextLevel;
+$('#btn-missed').onclick = () => ($('#missed').hidden = false);
 $('#btn-help').onclick = () => $('#dlg-help').showModal();
-$('#btn-stats').onclick = showStats;
 $('#btn-share').onclick = share;
 $('#btn-mute').onclick = () => {
   fx.setMuted(!fx.muted);
@@ -263,8 +336,12 @@ $('#btn-mute').onclick = () => {
 document.addEventListener('keydown', onKey);
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, fx.unlock);
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && game && dayNumber() !== game.day) start(lang); // pasó la medianoche con la pestaña abierta
+  if (!game) return;
+  if (document.hidden) stopClock();
+  else if (game.ms > 0) startClock();
 });
+addEventListener('pagehide', () => game && stopClock()); // respaldo: algunos navegadores no avisan al cerrar
+setInterval(renderClock, 250);
 
 if (!get(storage, 'wordini:help-seen')) {
   $('#dlg-help').showModal();

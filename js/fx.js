@@ -32,24 +32,29 @@ function beep(freq, duration, type, delay = 0, volume = 0.06) {
   } catch {}
 }
 
-export function tick() {
-  beep(1800, 0.03, 'square', 0, 0.03);
+// Un "tic" por casilla, cada vez más agudo a medida que la palabra se alarga.
+export function tick(n) {
+  beep(440 + 90 * n, 0.04, 'square', 0, 0.03);
   navigator.vibrate?.(10);
 }
 
-export function clack() {
-  beep(140, 0.12, 'sawtooth', 0, 0.08);
-  beep(90, 0.15, 'square', 0.04, 0.06);
+export function good(len) {
+  [523, 659, 784, 1047].slice(0, Math.min(4, len - 1)).forEach((f, k) => beep(f, 0.14, 'triangle', k * 0.05, 0.06));
+}
+
+export function gold() {
+  beep(1568, 0.2, 'triangle', 0.12, 0.06);
+  beep(2093, 0.3, 'triangle', 0.2, 0.05);
+}
+
+export function bad() {
+  beep(150, 0.15, 'sawtooth', 0, 0.05);
 }
 
 export function win() {
   [523, 659, 784, 1047].forEach((f, k) => beep(f, 0.25, 'triangle', 0.15 + k * 0.09, 0.08));
   if (calm) return;
   import(CONFETTI)
-    .then(m => m.default({ particleCount: 160, spread: 90, origin: { y: 0.6 }, colors: ['#00e5ff', '#ff2bd6', '#39ff88'] }))
+    .then(m => m.default({ particleCount: 160, spread: 90, origin: { y: 0.6 }, colors: ['#00e5ff', '#ff2bd6', '#39ff88', '#ffd23f'] }))
     .catch(() => {});
-}
-
-export function lose() {
-  [392, 330, 262].forEach((f, k) => beep(f, 0.3, 'sawtooth', 0.15 + k * 0.15, 0.05));
 }

@@ -16,15 +16,22 @@
     <h1>WORDINI</h1>
     <select id="lang" data-label="language"></select>
     <button id="btn-help" class="icon" data-label="help">?</button>
-    <button id="btn-stats" class="icon" data-label="stats">📊</button>
     <button id="btn-mute" class="icon" data-label="mute">🔊</button>
   </header>
 
   <main>
-    <div id="lock"></div>
-    <button id="btn-open"></button>
-    <p id="message" aria-live="polite"></p>
-    <ol id="history"></ol>
+    <div id="hud">
+      <div id="lvl"><span id="level"></span><span id="time"></span></div>
+      <div id="bar"><div id="fill"></div><span id="score"></span></div>
+      <span id="common"></span>
+    </div>
+    <p id="word" aria-live="polite"></p>
+    <div id="board"></div>
+    <button id="btn-next" data-t="nextLevel" hidden></button>
+    <details id="found-box">
+      <summary id="found-title"></summary>
+      <div id="found"></div>
+    </details>
   </main>
 
   <footer><a href="CREDITS.md" data-t="credits"></a></footer>
@@ -40,13 +47,18 @@
     <form method="dialog"><button data-t="close"></button></form>
   </dialog>
 
-  <dialog id="dlg-stats">
-    <h2 data-t="statsTitle"></h2>
-    <div id="stats"></div>
-    <div id="dist"></div>
-    <p id="next" data-t="next"></p>
-    <button id="btn-share" data-t="share"></button>
-    <form method="dialog"><button data-t="close"></button></form>
+  <dialog id="dlg-clear">
+    <h2 data-t="clearedTitle"></h2>
+    <p id="clear-score"></p>
+    <div class="row">
+      <button id="btn-share" data-t="share"></button>
+      <button id="btn-missed" data-t="missedBtn"></button>
+    </div>
+    <p id="missed" hidden></p>
+    <form method="dialog">
+      <button data-t="keepPlaying"></button>
+      <button id="btn-next-dlg" data-t="nextLevel"></button>
+    </form>
   </dialog>
 </body>
 </html>
