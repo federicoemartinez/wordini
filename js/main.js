@@ -45,6 +45,7 @@ async function start(newLang) {
     const res = await fetch(`words/${lang}.json`);
     if (!res.ok) throw new Error(res.status);
     loaded = await res.json();
+    if (!Array.isArray(loaded?.valid) || !Array.isArray(loaded?.common)) throw new Error('formato viejo'); // p. ej. la del criptex en caché
   } catch {
     if (seq === loadSeq) say(t(lang, 'loadError'));
     return;
@@ -241,9 +242,12 @@ function onPointerUp(e) {
   } else submit(path);
 }
 
+const LIGATURES = { Œ: 'OE', Æ: 'AE' }; // como en las listas (tools/build_words.py)
+
 const letterOf = key => {
   if (key.length !== 1) return null;
   const up = key.toUpperCase();
+  if (LIGATURES[up]) return LIGATURES[up];
   const c = up === 'Ñ' ? up : up.normalize('NFD')[0]; // É -> E, pero la Ñ queda
   return words.alphabet.includes(c) ? c : null;
 };
@@ -251,9 +255,8 @@ const letterOf = key => {
 function onKey(e) {
   if (!board || tracing || document.querySelector('dialog[open]') || e.target.tagName === 'SELECT') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.key === 'Enter' && e.target.closest('a, button, summary')) return; // ya reciben su click
+  if (e.key === 'Enter' && !typed) return; // sin palabra escrita, Enter es del link o botón enfocado
   if (e.key === 'Enter') {
-    if (!typed) return;
     const p = pathFor(typed, board.letters, pendingGold());
     if (p) submit(p);
     else {
@@ -318,9 +321,11 @@ function renderMute() {
 $('#lang').innerHTML = Object.entries(FLAGS).map(([l, flag]) => `<option value="${l}">${flag} ${l.toUpperCase()}</option>`).join('');
 fx.setMuted(get(storage, 'wordini:muted') === true);
 renderMute();
-await start(pickLang());
 
-$('#lang').onchange = e => start(e.target.value);
+$('#lang').onchange = e => {
+  e.target.blur(); // si no, el selector se queda con el teclado
+  start(e.target.value);
+};
 $('#board').onpointerdown = onPointerDown;
 $('#board').onpointermove = onPointerMove;
 $('#board').onpointerup = $('#board').onpointercancel = onPointerUp;
@@ -347,3 +352,5 @@ if (!get(storage, 'wordini:help-seen')) {
   $('#dlg-help').showModal();
   set(storage, 'wordini:help-seen', true);
 }
+
+start(pickLang()); // al final: los controles ya responden mientras se bajan las palabras
