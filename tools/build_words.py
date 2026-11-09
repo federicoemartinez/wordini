@@ -20,7 +20,7 @@ LIBRE = 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/'
 LANGS = {
     'es': ('ABCDEFGHIJKLMNÑOPQRSTUVWXYZ', 'es/es_ES', ['CASAS', 'COMI', 'DAMELO', 'ÑANDU'], ['NUGENT', 'KWH', 'PARTY']),
     'en': ('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'en/en_US', ['CATS', 'RUNNING', 'QUIZZES'], ['NUGENT', 'KWH', 'GPS']),
-    'fr': ('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'fr_FR/dictionaries/fr', ['CHEVAUX', 'MANGEAIENT', 'ETE'], ['NUGENT', 'KWH', 'PARTY']),
+    'fr': ('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'fr_FR/dictionaries/fr', ['CHEVAUX', 'MANGEAIENT', 'ETE', 'COEUR'], ['NUGENT', 'KWH', 'PARTY']),
 }
 MIN_LEN, MAX_LEN = 3, 12
 N_COMMON = 20_000
@@ -28,7 +28,7 @@ TOP_FREQ = 300_000  # palabras de wordfreq que se recorren para ordenar las comu
 
 
 def normalize(word, lang):
-    word = word.lower()
+    word = word.lower().replace('œ', 'oe').replace('æ', 'ae')  # NFD no separa las ligaduras
     if lang == 'es':
         word = word.replace('ñ', '\0')
     word = ''.join(c for c in unicodedata.normalize('NFD', word) if not unicodedata.combining(c))
@@ -55,13 +55,15 @@ def apply_pfx(word, p):
         return p.add + word[len(p.strip):]
 
 
-def expand(d):
+def expand(d, blocked_stem):
     """Todas las formas del diccionario: raíz, +sufijo, +sufijo encadenado, +prefijo y prefijo×sufijo."""
     aff = d.aff
-    skip = {f for f in (aff.FORBIDDENWORD, aff.ONLYINCOMPOUND) if f}
+    # NOSUGGEST marca insultos (en) y unidades o abreviaturas (fr): nada de eso sirve para jugar
+    skip = {f for f in (aff.FORBIDDENWORD, aff.ONLYINCOMPOUND, aff.NOSUGGEST) if f}
     needs_affix = lambda flags: aff.NEEDAFFIX and aff.NEEDAFFIX in flags
     for w in d.dic.words:
-        if w.captype != Type.NO or w.flags & skip:  # con mayúscula = nombre propio
+        # con mayúscula = nombre propio; raíz bloqueada = se saltean también todas sus flexiones
+        if w.captype != Type.NO or w.flags & skip or blocked_stem(w.stem):
             continue
         if not needs_affix(w.flags):
             yield w.stem
@@ -95,7 +97,8 @@ def build(lang):
     blocklist = (ROOT / 'tools' / 'blocklist' / f'{lang}.txt').read_text(encoding='utf-8')
     blocked = {normalize(l.strip(), lang) for l in blocklist.splitlines() if l.strip()}
 
-    valid = {n for form in expand(dictionary(dic)) if ok(n := normalize(form, lang)) and n not in blocked}
+    forms = expand(dictionary(dic), lambda stem: normalize(stem, lang) in blocked)
+    valid = {n for form in forms if ok(n := normalize(form, lang)) and n not in blocked}
 
     common = {}  # dict: conserva el orden de frecuencia
     for w in wordfreq.top_n_list(lang, TOP_FREQ):

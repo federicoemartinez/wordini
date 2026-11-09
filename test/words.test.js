@@ -25,3 +25,21 @@ test('palabras de 3 a 12 letras del alfabeto; common incluida en valid', () => {
     assert.ok(w.common.length >= 10000, l);
   }
 });
+
+test('las flexiones de palabras bloqueadas tampoco son válidas', () => {
+  const banned = {
+    en: ['NIGGAS', 'NIGGERS', 'CUNTS', 'FUCKERS', 'FUCKS', 'WHORES', 'SLUTS', 'KRAUTS', 'WOPS'],
+    es: ['PUTAS', 'PUTOS', 'PENDEJOS', 'CABRONES', 'MIERDAS', 'VERGAS'],
+    fr: ['PUTES', 'SALOPES', 'ENCULES', 'NEGRES', 'CONNARDS', 'MERDES'],
+  };
+  for (const l of LANGS) {
+    const valid = new Set(load(l).valid);
+    assert.deepEqual(banned[l].filter(w => valid.has(w)), [], l);
+  }
+});
+
+test('francés: las palabras con œ se juegan con OE', () => {
+  const valid = new Set(load('fr').valid);
+  const missing = ['COEUR', 'SOEUR', 'OEIL', 'OEUF', 'OEUVRE', 'VOEU', 'NOEUD'].filter(w => !valid.has(w));
+  assert.deepEqual(missing, []);
+});
