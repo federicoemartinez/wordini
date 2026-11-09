@@ -19,11 +19,11 @@ npm test   # = node --test (Node ≥ 22), sin dependencias
 ## Regenerar las listas de palabras
 
 ```bash
-python3 -m venv tools/.venv && tools/.venv/bin/pip install wordfreq==3.1.1
+python3 -m venv tools/.venv && tools/.venv/bin/pip install wordfreq==3.1.1 spylls==0.1.7
 tools/.venv/bin/python tools/build_words.py es en fr
 ```
 
-Cambiar las listas cambia los puzzles a partir de ese momento.
+Cambiar las listas cambia las canchas a partir de ese momento.
 
 ## Publicar
 
