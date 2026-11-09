@@ -12,6 +12,6 @@ test('cada idioma con textos tiene bandera y viceversa', () => {
 });
 
 test('t cae al inglés si el idioma no existe', () => {
-  assert.equal(t('es', 'open'), 'ABRIR');
-  assert.equal(t('xx', 'open'), 'OPEN');
+  assert.equal(t('es', 'share'), 'COMPARTIR');
+  assert.equal(t('xx', 'share'), 'SHARE');
 });
