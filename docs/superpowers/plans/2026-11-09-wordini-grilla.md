@@ -2,7 +2,7 @@
 
 > **Para agentes que lo ejecuten:** SUB-SKILL REQUERIDA: usar superpowers:subagent-driven-development (recomendado) o superpowers:executing-plans para implementar este plan tarea por tarea. Los pasos usan casillas (`- [ ]`) para el seguimiento.
 
-**Objetivo:** reemplazar la cerradura criptex por un juego de grilla. Se arman palabras arrastrando por letras vecinas, cada palabra suma puntos y cada nivel tiene un umbral. Los niveles son infinitos y el nivel N es igual para todos. Funciona en es, en y fr.
+**Objetivo:** reemplazar la cerradura criptex por un juego de grilla. Se arman palabras arrastrando por letras vecinas, cada palabra suma puntos y cada nivel tiene un umbral. Un cronómetro mide cuánto se tarda en pasar cada nivel. Los niveles son infinitos y el nivel N es igual para todos. Funciona en es, en y fr.
 
 **Arquitectura:**
 - **Datos:** un script de Python genera `words/{lang}.json` con dos listas. `valid` son todas las formas que genera el diccionario Hunspell de LibreOffice; `common` son las 20.000 más frecuentes según `wordfreq`.
@@ -21,8 +21,9 @@
 **Spec:** `docs/superpowers/specs/2026-11-09-wordini-grilla-design.md`. Leerla antes de empezar; este plan la implementa.
 
 **Estado del código:** todo el código de este plan ya se ejecutó en un prototipo:
-- los 27 tests pasan en unos 4 s;
-- se recorrió en Chromium headless a 390 px y 320 px: ayuda, trazado, palabra válida, repetida e inválida, teclado, nivel superado, faltantes, siguiente nivel, doradas y error de carga, sin errores de consola y sin scroll horizontal en 320 px.
+- los 29 tests pasan en unos 4 s;
+- se recorrió en Chromium headless a 390 px y 320 px: ayuda, trazado, palabra válida, repetida e inválida, teclado, nivel superado, faltantes, siguiente nivel, doradas y error de carga, sin errores de consola y sin scroll horizontal en 320 px;
+- el cronómetro se probó en el mismo navegador: no arranca sin tocar nada, se pausa con la pestaña oculta, retoma al volver, sigue después de recargar y queda congelado al pasar el nivel.
 
 Copiarlo tal cual. Si algo no anda, es una diferencia de entorno, no un error del plan.
 
@@ -65,7 +66,9 @@ Estos casos no los cubre ningún test automático y son los que más probablemen
    - Backspace y Escape borran;
    - Enter sobre un botón enfocado no envía una palabra;
    - Ctrl+R y Ctrl+L siguen funcionando.
-5. **Recargar después de pasar un nivel.** Se sigue en ese nivel, con el progreso intacto y **Siguiente nivel** visible.
+5. **Recargar o cambiar de pestaña.**
+   - Recargar a mitad de un nivel o después de pasarlo: se sigue en ese nivel, con el progreso y el tiempo intactos. Si ya se pasó, **Siguiente nivel** está visible.
+   - Con la pestaña oculta, el cronómetro no avanza.
 
 ## Estructura de archivos
 
@@ -732,7 +735,7 @@ git commit -m "feat: generador de canchas determinista con solver, umbral y casi
 **Interfaces:**
 - Consume `isValid(words, word)` y `points(word)` de `js/board.js` (Tarea 2).
 - Produce, en `js/game.js`:
-  - `newProgress(board)` → `{ found: [], goldLeft: number[], passed: false }`;
+  - `newProgress(board)` → `{ found: [], goldLeft: number[], passed: false, ms: 0 }`. `ms` es el tiempo de juego acumulado, que maneja la interfaz;
   - `step(path, cell, size)` → `number[]`. Devuelve **el mismo array** si no hay cambios, así la interfaz detecta los cambios con `===`;
   - `play(progress, board, words, path)` → `'short' | 'invalid' | 'dup' | 'ok' | 'cleared'`. Modifica `progress` cuando la palabra es nueva;
   - `score(found)` → `number`;
@@ -766,6 +769,10 @@ test('step: suma vecinas, ignora lejanas y repetidas, vuelve atrás', () => {
   assert.deepEqual(step([5, 10, 9], 5, 4), [5, 10, 9]); // ya usada y no es la anteúltima
   assert.deepEqual(step([5, 10, 9], 10, 4), [5, 10]); // vuelve a la anteúltima: borra la última
   assert.deepEqual(step([3], 4, 4), [3]); // 3 y 4 no son vecinas (fin de fila / principio de la siguiente)
+});
+
+test('newProgress: nada encontrado, doradas completas, reloj en 0', () => {
+  assert.deepEqual(newProgress(board([{ cell: 5, need: 2 }])), { found: [], goldLeft: [2], passed: false, ms: 0 });
 });
 
 test('wordOf y score', () => {
@@ -827,7 +834,7 @@ Esperado: FAIL con `Cannot find module '.../js/game.js'`.
 // Reglas de la partida, sin DOM: trazado, palabras nuevas, doradas y umbral. Spec §2.
 import { isValid, points } from './board.js';
 
-export const newProgress = board => ({ found: [], goldLeft: board.gold.map(g => g.need), passed: false });
+export const newProgress = board => ({ found: [], goldLeft: board.gold.map(g => g.need), passed: false, ms: 0 });
 export const score = found => found.reduce((n, w) => n + points(w), 0);
 export const wordOf = (board, path) => path.map(i => board.letters[i]).join('');
 
@@ -861,7 +868,7 @@ export function play(progress, board, words, path) {
 - [ ] **Paso 4: correr los tests**
 
 Run: `node --test test/game.test.js`
-Esperado: PASS, 6 tests.
+Esperado: PASS, 7 tests.
 
 - [ ] **Paso 5: commit**
 
@@ -881,11 +888,13 @@ git commit -m "feat: reglas de la partida: trazado, palabras, doradas y nivel su
 **Interfaces:**
 - Produce, en `js/state.js`:
   - `get(storage, key)` y `set(storage, key, value)`, sin cambios;
-  - `loadGame(storage, lang)` → la partida guardada `{ level, sig, found, goldLeft, passed }`, o `{ level: 1 }`;
+  - `loadGame(storage, lang)` → la partida guardada `{ level, sig, found, goldLeft, passed, ms }`, o `{ level: 1 }`;
   - `saveGame(storage, lang, game)`;
   - `sigOf(board)` → `string`;
   - `sameBoard(game, board)` → `boolean`.
-- Produce, en `js/share.js`: `shareText(lang, level, pts, url)` → `string`.
+- Produce, en `js/share.js`:
+  - `formatTime(ms)` → `string` (`2:31`, o `1:02:31` desde la hora);
+  - `shareText(lang, level, pts, ms, url)` → `string`.
 - Produce, en `js/i18n.js`: `FLAGS`, `STRINGS` y `t(lang, key)`, con las claves nuevas que usa la Tarea 5.
 
 - [ ] **Paso 1: escribir los tests**
@@ -949,12 +958,19 @@ test('storage roto o ausente: nada lanza y se arranca de cero', () => {
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shareText } from '../js/share.js';
+import { formatTime, shareText } from '../js/share.js';
+
+test('formatTime: minutos y segundos; horas solo si hacen falta', () => {
+  assert.equal(formatTime(0), '0:00');
+  assert.equal(formatTime(999), '0:00');
+  assert.equal(formatTime(151_000), '2:31');
+  assert.equal(formatTime(3_751_000), '1:02:31');
+});
 
 test('texto para compartir por idioma', () => {
-  assert.equal(shareText('es', 14, 212, 'https://example.com/?l=es'), 'Wordini 🇪🇸 · Nivel 14 ✅ · 212 pts\nhttps://example.com/?l=es');
-  assert.equal(shareText('en', 3, 41, 'https://example.com/?l=en'), 'Wordini 🇬🇧 · Level 3 ✅ · 41 pts\nhttps://example.com/?l=en');
-  assert.equal(shareText('fr', 1, 9, 'https://x/?l=fr'), 'Wordini 🇫🇷 · Niveau 1 ✅ · 9 pts\nhttps://x/?l=fr');
+  assert.equal(shareText('es', 14, 212, 151_000, 'https://example.com/?l=es'), 'Wordini 🇪🇸 · Nivel 14 ✅ · 212 pts · ⏱ 2:31\nhttps://example.com/?l=es');
+  assert.equal(shareText('en', 3, 41, 59_000, 'https://example.com/?l=en'), 'Wordini 🇬🇧 · Level 3 ✅ · 41 pts · ⏱ 0:59\nhttps://example.com/?l=en');
+  assert.equal(shareText('fr', 1, 9, 3_600_000, 'https://x/?l=fr'), 'Wordini 🇫🇷 · Niveau 1 ✅ · 9 pts · ⏱ 1:00:00\nhttps://x/?l=fr');
 });
 ```
 
@@ -970,7 +986,7 @@ test('t cae al inglés si el idioma no existe', () => {
 - [ ] **Paso 2: correrlos y ver que fallan**
 
 Run: `node --test test/state.test.js test/share.test.js`
-Esperado: FAIL. `sameBoard` y `sigOf` no existen y el texto para compartir no coincide.
+Esperado: FAIL. `sameBoard`, `sigOf` y `formatTime` no existen.
 
 - [ ] **Paso 3: reescribir los tres módulos**
 
@@ -1011,8 +1027,17 @@ export const sameBoard = (game, board) =>
 ```js
 import { FLAGS, t } from './i18n.js';
 
-// Texto para compartir: nivel superado y puntos, sin spoilers.
-export const shareText = (lang, level, pts, url) => `Wordini ${FLAGS[lang]} · ${t(lang, 'level')} ${level} ✅ · ${pts} pts\n${url}`;
+// Tiempo de juego: 2:31, o 1:02:31 desde la hora.
+export function formatTime(ms) {
+  const s = Math.floor(ms / 1000);
+  const pad = n => String(n).padStart(2, '0');
+  const [h, m] = [Math.floor(s / 3600), Math.floor(s / 60) % 60];
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+// Texto para compartir: nivel superado, puntos y tiempo, sin spoilers.
+export const shareText = (lang, level, pts, ms, url) =>
+  `Wordini ${FLAGS[lang]} · ${t(lang, 'level')} ${level} ✅ · ${pts} pts · ⏱ ${formatTime(ms)}\n${url}`;
 ```
 
 `js/i18n.js`:
@@ -1108,13 +1133,13 @@ export const t = (lang, key) => STRINGS[lang]?.[key] ?? STRINGS.en[key];
 - [ ] **Paso 4: correr todos los tests**
 
 Run: `npm test`
-Esperado: PASS, 27 tests (`words` 2, `board` 10, `game` 6, `i18n` 3, `share` 1, `state` 5).
+Esperado: PASS, 29 tests (`words` 2, `board` 10, `game` 7, `i18n` 3, `share` 2, `state` 5).
 
 - [ ] **Paso 5: commit**
 
 ```bash
 git add js/state.js js/share.js js/i18n.js test/state.test.js test/share.test.js test/i18n.test.js
-git commit -m "feat: progreso por nivel, texto para compartir y textos de la grilla"
+git commit -m "feat: progreso por nivel, tiempo, texto para compartir y textos de la grilla"
 ```
 
 ---
@@ -1125,7 +1150,7 @@ git commit -m "feat: progreso por nivel, texto para compartir y textos de la gri
 - Reescribir: `index.html`, `style.css`, `js/main.js`, `js/fx.js`, `README.md`
 
 **Interfaces:**
-- Consume todo lo anterior: `createBoard`, `pathFor` y `points` de `board.js`; `newProgress`, `play`, `score`, `step` y `wordOf` de `game.js`; `shareText`; `FLAGS` y `t`; `get`, `set`, `loadGame`, `saveGame`, `sameBoard` y `sigOf`.
+- Consume todo lo anterior: `createBoard`, `pathFor` y `points` de `board.js`; `newProgress`, `play`, `score`, `step` y `wordOf` de `game.js`; `formatTime` y `shareText`; `FLAGS` y `t`; `get`, `set`, `loadGame`, `saveGame`, `sameBoard` y `sigOf`.
 - Produce, en `js/fx.js`: `tick(n)`, `good(len)`, `gold()`, `bad()`, `win()`, `unlock()`, `muted` y `setMuted`. `clack` y `lose` desaparecen.
 
 - [ ] **Paso 1: `index.html`**
@@ -1154,7 +1179,7 @@ git commit -m "feat: progreso por nivel, texto para compartir y textos de la gri
 
   <main>
     <div id="hud">
-      <span id="level"></span>
+      <div id="lvl"><span id="level"></span><span id="time"></span></div>
       <div id="bar"><div id="fill"></div><span id="score"></span></div>
       <span id="common"></span>
     </div>
@@ -1254,7 +1279,9 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 
 /* Nivel, barra de puntos hacia el umbral y contador de comunes */
 #hud { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .6rem; font-size: .8rem; }
+#lvl { display: flex; flex-direction: column; gap: .15rem; }
 #level { color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
+#time { font-size: .7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 #common { font-family: system-ui, sans-serif; color: var(--muted); }
 
 #bar { position: relative; height: 1.5rem; border: 2px solid var(--magenta); border-radius: 1rem; box-shadow: 0 0 8px var(--magenta); }
@@ -1452,7 +1479,7 @@ export function win() {
 ```js
 import { createBoard, pathFor, points } from './board.js';
 import { newProgress, play, score, step, wordOf } from './game.js';
-import { shareText } from './share.js';
+import { formatTime, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
 import { get, set, loadGame, saveGame, sameBoard, sigOf } from './state.js';
 import * as fx from './fx.js';
@@ -1472,6 +1499,7 @@ let lang, words, board, game;
 let path = []; // camino en curso, con el dedo o el teclado
 let typed = ''; // palabra escrita con el teclado
 let tracing = false;
+let since = null; // performance.now() desde que el reloj corre; null = parado
 let loadSeq = 0; // solo la última carga pedida puede tocar la pantalla
 
 function pickLang() {
@@ -1481,6 +1509,7 @@ function pickLang() {
 
 async function start(newLang) {
   const seq = ++loadSeq;
+  if (game) stopClock(); // guarda el tiempo con la clave del idioma que se deja
   lang = newLang;
   board = game = undefined; // mientras carga no hay partida: nada puede guardarse con la clave de otro idioma
   $('#board').replaceChildren();
@@ -1507,12 +1536,40 @@ async function start(newLang) {
 function enterLevel(saved) {
   board = createBoard(lang, saved.level, words);
   game = sameBoard(saved, board) ? saved : { level: saved.level, sig: sigOf(board), ...newProgress(board) };
+  game.ms ??= 0; // partidas guardadas antes del reloj
   saveGame(storage, lang, game);
   path = [];
   typed = '';
+  since = null;
+  if (game.ms > 0) startClock(); // venía jugando este nivel: retoma
   renderBoard();
   render();
   say('');
+}
+
+// El reloj corre desde la primera letra del nivel hasta pasarlo, y solo con la pestaña a la vista.
+const elapsed = () => game.ms + (since === null ? 0 : performance.now() - since);
+
+function startClock() {
+  if (since === null && !game.passed && !document.hidden) since = performance.now();
+}
+
+// Pasa lo corrido a game.ms (lo que se guarda) sin parar el reloj.
+function syncClock() {
+  if (since === null) return;
+  const now = performance.now();
+  game.ms += now - since;
+  since = now;
+}
+
+function stopClock() {
+  syncClock();
+  since = null;
+  saveGame(storage, lang, game);
+}
+
+function renderClock() {
+  if (game) $('#time').textContent = `⏱ ${formatTime(elapsed())}`;
 }
 
 function renderTexts() {
@@ -1569,6 +1626,7 @@ function render() {
     }),
   );
   $('#btn-next').hidden = !game.passed;
+  renderClock();
 }
 
 // Resalta el camino, dibuja la línea entre los centros de las casillas y muestra la palabra en curso.
@@ -1604,6 +1662,8 @@ function submit(p) {
     fx.bad();
     return;
   }
+  if (result === 'cleared') stopClock();
+  else syncClock();
   saveGame(storage, lang, game);
   say(word, 'good');
   pop(`+${points(word)}`);
@@ -1634,6 +1694,7 @@ function onPointerDown(e) {
   tracing = true;
   typed = '';
   path = [Number(tile.dataset.i)];
+  startClock();
   fx.tick(1);
   renderPath();
 }
@@ -1683,8 +1744,10 @@ function onKey(e) {
     }
   } else if (e.key === 'Backspace') typed = typed.slice(0, -1);
   else if (e.key === 'Escape') typed = '';
-  else if (letterOf(e.key)) typed += letterOf(e.key);
-  else return;
+  else if (letterOf(e.key)) {
+    typed += letterOf(e.key);
+    startClock();
+  } else return;
   e.preventDefault();
   if (e.key === 'Enter') return;
   path = pathFor(typed, board.letters, pendingGold()) ?? [];
@@ -1694,7 +1757,7 @@ function onKey(e) {
 
 function showCleared() {
   const missed = board.missed(game.found);
-  $('#clear-score').textContent = `${t(lang, 'level')} ${game.level} · ${score(game.found)} pts`;
+  $('#clear-score').textContent = `${t(lang, 'level')} ${game.level} · ${score(game.found)} pts · ⏱ ${formatTime(game.ms)}`;
   $('#missed').textContent = missed.join(' ');
   $('#missed').hidden = true;
   $('#btn-missed').hidden = !missed.length;
@@ -1709,7 +1772,7 @@ function nextLevel() {
 
 async function share() {
   const url = `${location.origin}${location.pathname}?l=${lang}`;
-  const text = shareText(lang, game.level, score(game.found), url);
+  const text = shareText(lang, game.level, score(game.found), game.ms, url);
   if (navigator.share) {
     try {
       await navigator.share({ text });
@@ -1751,6 +1814,13 @@ $('#btn-mute').onclick = () => {
 };
 document.addEventListener('keydown', onKey);
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, fx.unlock);
+document.addEventListener('visibilitychange', () => {
+  if (!game) return;
+  if (document.hidden) stopClock();
+  else if (game.ms > 0) startClock();
+});
+addEventListener('pagehide', () => game && stopClock()); // respaldo: algunos navegadores no avisan al cerrar
+setInterval(renderClock, 250);
 
 if (!get(storage, 'wordini:help-seen')) {
   $('#dlg-help').showModal();
@@ -1762,6 +1832,7 @@ Decisiones que no se ven en el código y conviene no "arreglar":
 - **Puntero:** el `pointerdown` acepta toda la casilla. El `pointermove` solo acepta el círculo central (`0.36 × ancho`), para que una diagonal no agarre una vecina.
 - **Captura:** `setPointerCapture` va sobre `#board`, no sobre la casilla, para que el `pointermove` siga llegando aunque el dedo salga de la casilla donde empezó.
 - **`dataset`:** no se puede asignar con `Object.assign`, porque es de solo lectura. Por eso `tile.dataset.i = i` va aparte.
+- **Reloj:** se mide con `since` (`performance.now()` mientras corre) más `game.ms` (lo acumulado, que es lo que se guarda). `syncClock` pasa lo corrido a `game.ms` sin parar el reloj; así cada palabra guarda el tiempo. En `start()`, `stopClock()` va **antes** de cambiar `lang`, para guardar con la clave del idioma que se deja.
 
 - [ ] **Paso 5: `README.md`**
 
@@ -1819,7 +1890,7 @@ createBoard('es', 1, words).missed([]); // todas las palabras comunes del nivel 
 - [ ] **Paso 6: tests**
 
 Run: `npm test`
-Esperado: PASS, 27 tests.
+Esperado: PASS, 29 tests.
 
 - [ ] **Paso 7: probarlo en el navegador (Foco de revisión)**
 
@@ -1846,7 +1917,13 @@ Revisar, con DevTools abiertas en la pestaña Console (no tiene que aparecer nin
   - en la consola: `localStorage.setItem('wordini:es', JSON.stringify({level: 13}))` y recargar. Se ve una grilla 5×5;
   - con `const { createBoard } = await import('/js/board.js'); const w = await (await fetch('/words/es.json')).json(); createBoard('es', 13, w).missed([])` se obtienen palabras para pasarlo;
   - al llegar al umbral con las doradas en 0: confetti, sonido y el modal con Compartir, "Ver las que faltaron", "Seguir jugando" y "Siguiente nivel".
-- [ ] **Foco 5:** cerrar el modal con "Seguir jugando" y recargar. Se sigue en el mismo nivel, con el mismo progreso y el botón **Siguiente nivel** visible.
+- [ ] **Cronómetro:**
+  - al entrar a un nivel marca `⏱ 0:00` y no avanza hasta tocar o escribir la primera letra;
+  - al pasar el nivel se congela y el modal muestra el mismo tiempo.
+- [ ] **Foco 5:**
+  - a mitad de un nivel, cambiar a otra pestaña 10 s y volver: el tiempo no avanzó;
+  - recargar: el tiempo sigue desde donde estaba;
+  - pasar el nivel, cerrar el modal con "Seguir jugando" y recargar: se sigue en el mismo nivel, con el mismo progreso, el tiempo congelado y **Siguiente nivel** visible.
 - [ ] **Foco 2:**
   - cambiar de idioma y volver enseguida, varias veces: cada idioma conserva su nivel;
   - pasar un nivel y cambiar de idioma antes de 1 segundo: el modal no aparece en el otro idioma.
@@ -1858,7 +1935,7 @@ Revisar, con DevTools abiertas en la pestaña Console (no tiene que aparecer nin
 
 ```bash
 git add index.html style.css js/main.js js/fx.js README.md
-git commit -m "feat: interfaz de grilla neón con trazado, teclado, doradas y niveles"
+git commit -m "feat: interfaz de grilla neón con trazado, teclado, doradas, niveles y cronómetro"
 ```
 
 ---

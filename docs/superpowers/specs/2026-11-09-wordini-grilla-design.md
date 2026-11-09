@@ -43,10 +43,19 @@ Juego de palabras adictivo y multiidioma (es, en, fr), 100% estático y sin back
 ### 2.4 Pasar de nivel
 
 - Para pasar de nivel hay que **llegar al umbral y dejar todas las doradas en 0**.
-- No hay reloj y no se pierde.
+- No se pierde nunca.
+
+### 2.4.1 Cronómetro
+
+- Arranca con la primera letra que se toca o se escribe en el nivel. Cargar las palabras o leer la ayuda no cuenta.
+- Se frena al pasar el nivel. Si después se sigue jugando, queda fijo en el tiempo que se tardó en pasarlo.
+- Se pausa mientras la pestaña no está a la vista.
+- El tiempo se guarda con la partida: al recargar sigue desde donde estaba, y cada idioma conserva el suyo.
+- Se muestra como `⏱ 2:31`, o `⏱ 1:02:31` desde la hora.
+- No hay mejores tiempos ni récords: no se guarda historial de niveles anteriores.
 - **Al pasar:**
   - hay festejo, con confetti y sonido;
-  - se abre el modal de nivel superado, con el nivel y los puntos (las encontradas siguen debajo de la grilla);
+  - se abre el modal de nivel superado, con el nivel, los puntos y el tiempo (las encontradas siguen debajo de la grilla);
   - un botón muestra las palabras comunes que faltaron (§3.3);
   - se puede compartir.
 - **Después del festejo** se puede **seguir jugando** esa cancha para sumar puntos o tocar **Siguiente nivel**.
@@ -55,7 +64,7 @@ Juego de palabras adictivo y multiidioma (es, en, fr), 100% estático y sin back
 ### 2.5 Compartir
 
 ```
-Wordini 🇪🇸 · Nivel 14 ✅ · 212 pts
+Wordini 🇪🇸 · Nivel 14 ✅ · 212 pts · ⏱ 2:31
 https://<origen>/?l=es
 ```
 
@@ -191,11 +200,15 @@ points(word) → number
 isValid(words, word) → boolean // bisección en words.valid
 
 // js/game.js: reglas de la partida, sin DOM
-newProgress(board) → { found: [], goldLeft: number[], passed: false }
+newProgress(board) → { found: [], goldLeft: number[], passed: false, ms: 0 }
 step(path, cell, size) → number[]   // trazado: suma vecina, ignora lejana o usada, vuelve atrás
 play(progress, board, words, path) → 'short' | 'invalid' | 'dup' | 'ok' | 'cleared'
 score(found) → number
 wordOf(board, path) → string
+
+// js/share.js
+formatTime(ms) → string             // 2:31 o 1:02:31
+shareText(lang, level, pts, ms, url) → string
 ```
 
 ## 5. Que no se vea la lista de soluciones
@@ -208,7 +221,7 @@ Es igual que en el criptex, sin intentar ocultarla de verdad: la lista de palabr
 
 - **Encabezado:** "WORDINI", selector de idioma, ayuda y silencio, como ahora. Se va el botón de estadísticas.
 - **Barra de nivel:**
-  - "NIVEL 14" y una barra neón de progreso hacia el umbral, por ejemplo `132 / 180`;
+  - "NIVEL 14" con el cronómetro debajo (`⏱ 2:31`), y una barra neón de progreso hacia el umbral, por ejemplo `132 / 180`;
   - al pasar el umbral, la barra se pone verde y los puntos siguen sumando;
   - al lado, el contador "comunes 12/48", para saber cuánto queda cuando uno se traba.
 - **Palabra en curso:**
@@ -262,10 +275,11 @@ Es igual que en el criptex, sin intentar ocultarla de verdad: la lista de palabr
 | Clave | Contenido |
 |---|---|
 | `wordini:lang`, `wordini:muted`, `wordini:help-seen` | igual que ahora |
-| `wordini:{lang}` | `{ level, sig, found: string[], goldLeft: number[], passed: boolean }` |
+| `wordini:{lang}` | `{ level, sig, found: string[], goldLeft: number[], passed: boolean, ms: number }` |
 
 - **`sig`:** las letras de la cancha concatenadas. Si al cargar no coincide con la cancha generada (porque cambiaron las listas), se reinicia el progreso del nivel y se conserva el número de nivel.
 - **Puntos:** se calculan a partir de `found`; no se guardan.
+- **`ms`:** tiempo de juego acumulado del nivel (§2.4.1). Se guarda con cada palabra nueva, al ocultarse la pestaña (`visibilitychange`), al cerrar (`pagehide`) y al cambiar de idioma. Si una partida guardada no lo tiene, arranca en 0.
 - **Formato del criptex:** si el objeto guardado no tiene `level`, se descarta.
 - **Fallas:** se mantiene el acceso tolerante a fallos (`try/catch`, juego sin persistencia).
 
@@ -292,7 +306,7 @@ Se corren con `node --test`, sin dependencias.
   - `sig` distinta;
   - formato del criptex;
   - `localStorage` roto.
-- **`test/share.test.js`:** el texto de §2.5.
+- **`test/share.test.js`:** `formatTime` (0:00, 2:31, 1:02:31) y el texto de §2.5.
 - **`test/i18n.test.js`:** igual que ahora.
 - **Interfaz:** se prueba jugando en celular y en escritorio. Hay que probar especialmente las diagonales con el dedo.
 
