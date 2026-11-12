@@ -39,6 +39,8 @@ node tools/levels.mjs es 1 50   # language, from, to
 
 The site is published with GitHub Pages from the root of `master`, so every push to `master` redeploys it. Any other static host works too (e.g. Cloudflare Pages): publish the repo root as is. Both serve `words/*.json` compressed (~1 MB for Spanish).
 
+`sw.js` makes every load ask the server whether each file changed, so players get a new version on their next load, all of it at once, without clearing the cache (progress lives in `localStorage` and isn't touched). The link preview image `og.jpg` is a screenshot of `tools/og.html`.
+
 ## See a board's words while developing
 
 Open the DevTools console and run:

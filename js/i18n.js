@@ -28,6 +28,10 @@ export const STRINGS = {
     hint: 'Hint',
     loading: 'Loading…',
     loadError: 'Could not load the words. Check your connection and reload.',
+    coffee: '☕ Buy me a coffee',
+    coffeeAsk: 'Enjoying Wordini? ☕ Buy me a coffee',
+    title: 'Wordini · word game',
+    description: 'Free word game: drag across touching letters to spell words and beat endless levels. Same board for everyone, in English, Spanish and French.',
   },
   es: {
     level: 'Nivel',
@@ -55,6 +59,10 @@ export const STRINGS = {
     hint: 'Pista',
     loading: 'Cargando…',
     loadError: 'No se pudieron cargar las palabras. Revisa tu conexión y recarga.',
+    coffee: '☕ Invítame un cafecito',
+    coffeeAsk: '¿Te gusta Wordini? ☕ Invítame un cafecito',
+    title: 'Wordini · juego de palabras',
+    description: 'Juego de palabras gratis: une letras vecinas para formar palabras y supera niveles infinitos. El mismo tablero para todos, en español, inglés y francés.',
   },
   fr: {
     level: 'Niveau',
@@ -82,6 +90,10 @@ export const STRINGS = {
     hint: 'Indice',
     loading: 'Chargement…',
     loadError: 'Impossible de charger les mots. Vérifie ta connexion et recharge.',
+    coffee: '☕ Offre-moi un café',
+    coffeeAsk: 'Tu aimes Wordini ? ☕ Offre-moi un café',
+    title: 'Wordini · jeu de mots',
+    description: 'Jeu de mots gratuit : relie des lettres voisines pour former des mots et franchis des niveaux sans fin. La même grille pour tous, en français, anglais et espagnol.',
   },
 };
 

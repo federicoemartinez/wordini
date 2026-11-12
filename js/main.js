@@ -102,6 +102,8 @@ function renderClock() {
 }
 
 function renderTexts() {
+  document.title = t(lang, 'title');
+  document.querySelector('meta[name=description]').content = t(lang, 'description');
   for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(lang, el.dataset.t);
   for (const el of document.querySelectorAll('[data-label]')) {
     el.title = t(lang, el.dataset.label);
@@ -396,4 +398,5 @@ if (!get(storage, 'wordini:help-seen')) {
   set(storage, 'wordini:help-seen', true);
 }
 
+navigator.serviceWorker?.register('sw.js'); // a new version shows up on the next load (see sw.js)
 start(pickLang()); // last: the controls already respond while the words download
