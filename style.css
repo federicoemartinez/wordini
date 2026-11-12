@@ -114,6 +114,22 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 .tile.gold { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 8px var(--gold), 0 0 18px var(--gold); text-shadow: 0 0 8px var(--gold); }
 .tile.gold.done { border-color: var(--green); color: var(--green); box-shadow: 0 0 8px var(--green); text-shadow: 0 0 8px var(--green); }
 .tile.gold.on { border-color: var(--magenta); }
+/* Hint tiles: a blinking outline, so it doesn't fight the border/shadow of .on and .gold */
+.tile.hint { outline: 2px solid var(--green); outline-offset: 2px; animation: blink .8s infinite alternate; }
+@keyframes blink { to { outline-color: transparent; } }
+/* Arrow towards the next tile of the hint: rotated about the tile's center, then pushed to its edge */
+.arrow {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: .55em;
+  color: var(--green);
+  text-shadow: 0 0 6px var(--green), 0 0 12px var(--green);
+  transform: rotate(var(--a)) translateX(36%);
+  pointer-events: none;
+}
 
 .badge {
   position: absolute;
@@ -143,6 +159,13 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
   opacity: .55;
   filter: drop-shadow(0 0 6px var(--magenta));
 }
+
+#hint-row { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .8rem; }
+#hint { margin: 0; min-width: 6em; color: var(--green); text-shadow: 0 0 8px var(--green); letter-spacing: .15em; }
+#btn-hint { flex: none; border-color: var(--gold); box-shadow: 0 0 8px var(--gold); }
+#btn-hint:disabled { opacity: .35; cursor: default; }
+#btn-hint.nudge { animation: nudge .7s infinite alternate; }
+@keyframes nudge { to { transform: scale(1.15); box-shadow: 0 0 14px var(--gold), 0 0 30px var(--gold); } }
 
 #btn-next, #btn-share {
   color: var(--green);

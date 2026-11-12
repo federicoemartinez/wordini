@@ -1,5 +1,5 @@
 import { createBoard, pathFor, points } from './board.js';
-import { newProgress, play, score, step, wordOf } from './game.js';
+import { hint, newProgress, play, score, step, wordOf } from './game.js';
 import { formatTime, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
 import { get, set, loadGame, saveGame, sameBoard, sigOf } from './state.js';
@@ -22,6 +22,7 @@ let typed = ''; // word typed on the keyboard
 let tracing = false;
 let since = null; // performance.now() since the clock started running; null = stopped
 let loadSeq = 0; // only the latest requested load may touch the screen
+let idleFrom = 0; // elapsed() at the last word found: after a minute without words the hint button nudges
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -34,7 +35,7 @@ async function start(newLang) {
   lang = newLang;
   board = game = undefined; // no game while loading: nothing can be saved under another language's key
   $('#board').replaceChildren();
-  $('#hud').hidden = $('#found-box').hidden = $('#btn-next').hidden = true;
+  $('#hud').hidden = $('#found-box').hidden = $('#btn-next').hidden = $('#hint-row').hidden = true;
   set(storage, 'wordini:lang', lang);
   document.documentElement.lang = lang;
   $('#lang').value = lang;
@@ -59,6 +60,8 @@ function enterLevel(saved) {
   board = createBoard(lang, saved.level, words);
   game = sameBoard(saved, board) ? saved : { level: saved.level, sig: sigOf(board), ...newProgress(board) };
   game.ms ??= 0; // games saved before the stopwatch existed
+  game.hints ??= 0; // ...or hints
+  idleFrom = game.ms;
   saveGame(storage, lang, game);
   path = [];
   typed = '';
@@ -91,7 +94,9 @@ function stopClock() {
 }
 
 function renderClock() {
-  if (game) $('#time').textContent = `⏱ ${formatTime(elapsed())}`;
+  if (!game) return;
+  $('#time').textContent = `⏱ ${formatTime(elapsed())}`;
+  $('#btn-hint').classList.toggle('nudge', !game.hint && !$('#btn-hint').disabled && elapsed() - idleFrom > 60_000);
 }
 
 function renderTexts() {
@@ -127,12 +132,13 @@ function renderBoard() {
 
 function render() {
   const pts = score(game.found);
-  $('#hud').hidden = $('#found-box').hidden = false;
+  const missed = board.missed(game.found);
+  $('#hud').hidden = $('#found-box').hidden = $('#hint-row').hidden = false;
   $('#level').textContent = `${t(lang, 'level')} ${game.level}`;
   $('#score').textContent = `${pts} / ${board.threshold}`;
   $('#fill').style.width = `${Math.min(100, (100 * pts) / board.threshold)}%`;
   $('#bar').classList.toggle('done', pts >= board.threshold);
-  $('#common').textContent = `${board.commonCount - board.missed(game.found).length}/${board.commonCount} ${t(lang, 'common')}`;
+  $('#common').textContent = `${board.commonCount - missed.length}/${board.commonCount} ${t(lang, 'common')}`;
   board.gold.forEach((g, k) => {
     const tile = $('#board').children[g.cell];
     tile.classList.toggle('done', game.goldLeft[k] === 0);
@@ -147,6 +153,19 @@ function render() {
       return p;
     }),
   );
+  const h = game.hint;
+  const lit = h ? h.path.slice(0, h.shown) : [];
+  board.letters.forEach((_, i) => $('#board').children[i].classList.toggle('hint', lit.includes(i)));
+  $('#board').querySelectorAll('.arrow').forEach(a => a.remove());
+  lit.forEach((c, k) => {
+    const next = h.path[k + 1];
+    const deg = (Math.atan2(Math.floor(next / board.size) - Math.floor(c / board.size), (next % board.size) - (c % board.size)) * 180) / Math.PI;
+    const arrow = Object.assign(document.createElement('i'), { className: 'arrow', textContent: '➜' });
+    arrow.style.setProperty('--a', `${deg}deg`);
+    $('#board').children[c].append(arrow);
+  });
+  $('#hint').textContent = h ? h.path.map((c, i) => (i < h.shown ? board.letters[c] : '_')).join(' ') : '';
+  $('#btn-hint').disabled = h ? h.shown >= h.path.length - 2 : !missed.length;
   $('#btn-next').hidden = !game.passed;
   renderClock();
 }
@@ -187,6 +206,7 @@ function submit(p) {
   if (result === 'cleared') stopClock();
   else syncClock();
   saveGame(storage, lang, game);
+  idleFrom = elapsed();
   say(word, 'good');
   pop(`+${points(word)}`);
   fx.good(word.length);
@@ -332,6 +352,13 @@ $('#board').onpointerup = $('#board').onpointercancel = onPointerUp;
 $('#btn-next').onclick = $('#btn-next-dlg').onclick = nextLevel;
 $('#btn-missed').onclick = () => ($('#missed').hidden = false);
 $('#btn-help').onclick = () => $('#dlg-help').showModal();
+$('#btn-hint').onclick = () => {
+  if (!game || !hint(game, board)) return;
+  startClock();
+  saveGame(storage, lang, game);
+  fx.tick(game.hint.shown);
+  render();
+};
 $('#btn-share').onclick = share;
 $('#btn-mute').onclick = () => {
   fx.setMuted(!fx.muted);

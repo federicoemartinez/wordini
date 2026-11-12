@@ -1,13 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newProgress, play, score, step, wordOf } from '../js/game.js';
+import { hint, newProgress, play, score, step, wordOf } from '../js/game.js';
 
 // C A S A
 // M O R S
 // Z Z Z Z
 // Z Z Z Z
 const words = { valid: ['AMOR', 'CASA', 'CASAS', 'MAS', 'ROMA', 'SAC'] };
-const board = (gold = [], threshold = 100) => ({ letters: [...'CASAMORSZZZZZZZZ'], gold, threshold });
+const common = ['AMOR', 'CASA', 'CASAS', 'ROMA'];
+const board = (gold = [], threshold = 100) => ({
+  letters: [...'CASAMORSZZZZZZZZ'],
+  gold,
+  threshold,
+  missed: found => common.filter(w => !found.includes(w)),
+});
 const CASA = [0, 1, 2, 3];
 const ROMA = [6, 5, 4, 1];
 
@@ -22,7 +28,7 @@ test('step: suma vecinas, ignora lejanas y repetidas, vuelve atrás', () => {
 });
 
 test('newProgress: nada encontrado, doradas completas, reloj en 0', () => {
-  assert.deepEqual(newProgress(board([{ cell: 5, need: 2 }])), { found: [], goldLeft: [2], passed: false, ms: 0 });
+  assert.deepEqual(newProgress(board([{ cell: 5, need: 2 }])), { found: [], goldLeft: [2], passed: false, ms: 0, hints: 0 });
 });
 
 test('wordOf y score', () => {
@@ -70,4 +76,43 @@ test('play: el nivel se pasa una sola vez, con umbral y doradas en 0', () => {
   assert.equal(play(p, b, words, CASA), 'cleared');
   assert.equal(p.passed, true);
   assert.equal(play(p, b, words, [0, 1, 2, 3, 7]), 'ok'); // CASAS después de pasar: suma, sin otro festejo
+});
+
+test('hint: prende la primera casilla de una común que falta, la más cercana a 5 letras', () => {
+  const b = board();
+  const p = newProgress(b);
+  assert.equal(hint(p, b), true);
+  assert.deepEqual(p.hint, { path: [0, 1, 2, 3, 7], shown: 1 }); // CASAS
+  assert.equal(p.hints, 1);
+});
+
+test('hint: cada pedido prende una casilla más; la flecha de la última muestra otra, así que paran 2 antes', () => {
+  const b = board();
+  const p = newProgress(b);
+  for (let i = 0; i < 3; i++) assert.equal(hint(p, b), true);
+  assert.equal(p.hint.shown, 3);
+  assert.equal(hint(p, b), false); // CASAS: 3 prendidas + la flecha hacia la 4.ª; la 5.ª nunca se muestra
+  assert.deepEqual([p.hint.shown, p.hints], [3, 3]);
+});
+
+test('hint: prefiere una palabra que pase por una dorada pendiente', () => {
+  const b = board([{ cell: 5, need: 1 }]);
+  const p = newProgress(b);
+  hint(p, b);
+  assert.deepEqual(p.hint.path, [1, 4, 5, 6]); // AMOR, por la O dorada
+  p.goldLeft = [0];
+  delete p.hint;
+  hint(p, b);
+  assert.deepEqual(p.hint.path, [0, 1, 2, 3, 7]); // dorada completa: vuelve a CASAS
+});
+
+test('hint: encontrar la palabra la borra; sin comunes que falten no hay pista', () => {
+  const b = board();
+  const p = newProgress(b);
+  hint(p, b);
+  play(p, b, words, [0, 1, 2, 3, 7]); // CASAS
+  assert.equal(p.hint, undefined);
+  p.found.push('AMOR', 'CASA', 'ROMA');
+  assert.equal(hint(p, b), false);
+  assert.equal(p.hint, undefined);
 });
