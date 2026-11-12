@@ -26,16 +26,15 @@ test('palabras de 3 a 12 letras del alfabeto; common incluida en valid', () => {
   }
 });
 
-test('las flexiones de palabras bloqueadas tampoco son válidas', () => {
-  const banned = {
-    en: ['NIGGAS', 'NIGGERS', 'CUNTS', 'FUCKERS', 'FUCKS', 'WHORES', 'SLUTS', 'KRAUTS', 'WOPS'],
-    es: ['PUTAS', 'PUTOS', 'PENDEJOS', 'CABRONES', 'MIERDAS', 'VERGAS'],
-    fr: ['PUTES', 'SALOPES', 'ENCULES', 'NEGRES', 'CONNARDS', 'MERDES'],
-  };
-  for (const l of LANGS) {
-    const valid = new Set(load(l).valid);
-    assert.deepEqual(banned[l].filter(w => valid.has(w)), [], l);
-  }
+test('español: sin lista de bloqueo, con argentinismos (es_AR) y los agregados a mano', () => {
+  const valid = new Set(load('es').valid);
+  const missing = ['ASNO', 'COGER', 'COGIMOS', 'MARTILLOS', 'LABURO', 'BOLUDO', 'BONDI', 'PIBES'].filter(w => !valid.has(w));
+  assert.deepEqual(missing, []);
+});
+
+test('inglés: los insultos que Hunspell marca NOSUGGEST siguen afuera', () => {
+  const valid = new Set(load('en').valid);
+  assert.deepEqual(['NIGGERS', 'NIGGAS', 'CUNTS', 'KRAUTS', 'WOPS'].filter(w => valid.has(w)), []);
 });
 
 test('francés: las palabras con œ se juegan con OE', () => {
