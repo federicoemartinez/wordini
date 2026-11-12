@@ -14,14 +14,14 @@ trail.id = 'trail';
 let storage;
 try {
   storage = localStorage;
-} catch {} // bloqueado: el juego funciona sin persistencia
+} catch {} // blocked: the game works without persistence
 
 let lang, words, board, game;
-let path = []; // camino en curso, con el dedo o el teclado
-let typed = ''; // palabra escrita con el teclado
+let path = []; // path in progress, by finger or keyboard
+let typed = ''; // word typed on the keyboard
 let tracing = false;
-let since = null; // performance.now() desde que el reloj corre; null = parado
-let loadSeq = 0; // solo la última carga pedida puede tocar la pantalla
+let since = null; // performance.now() since the clock started running; null = stopped
+let loadSeq = 0; // only the latest requested load may touch the screen
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -30,9 +30,9 @@ function pickLang() {
 
 async function start(newLang) {
   const seq = ++loadSeq;
-  if (game) stopClock(); // guarda el tiempo con la clave del idioma que se deja
+  if (game) stopClock(); // saves the time under the key of the language being left
   lang = newLang;
-  board = game = undefined; // mientras carga no hay partida: nada puede guardarse con la clave de otro idioma
+  board = game = undefined; // no game while loading: nothing can be saved under another language's key
   $('#board').replaceChildren();
   $('#hud').hidden = $('#found-box').hidden = $('#btn-next').hidden = true;
   set(storage, 'wordini:lang', lang);
@@ -45,12 +45,12 @@ async function start(newLang) {
     const res = await fetch(`words/${lang}.json`);
     if (!res.ok) throw new Error(res.status);
     loaded = await res.json();
-    if (!Array.isArray(loaded?.valid) || !Array.isArray(loaded?.common)) throw new Error('formato viejo'); // p. ej. la del criptex en caché
+    if (!Array.isArray(loaded?.valid) || !Array.isArray(loaded?.common)) throw new Error('old format'); // e.g. the criptex one, cached
   } catch {
     if (seq === loadSeq) say(t(lang, 'loadError'));
     return;
   }
-  if (seq !== loadSeq) return; // el jugador cambió de idioma mientras cargaba
+  if (seq !== loadSeq) return; // the player switched language while loading
   words = loaded;
   enterLevel(loadGame(storage, lang));
 }
@@ -58,25 +58,25 @@ async function start(newLang) {
 function enterLevel(saved) {
   board = createBoard(lang, saved.level, words);
   game = sameBoard(saved, board) ? saved : { level: saved.level, sig: sigOf(board), ...newProgress(board) };
-  game.ms ??= 0; // partidas guardadas antes del reloj
+  game.ms ??= 0; // games saved before the stopwatch existed
   saveGame(storage, lang, game);
   path = [];
   typed = '';
   since = null;
-  if (game.ms > 0) startClock(); // venía jugando este nivel: retoma
+  if (game.ms > 0) startClock(); // was already playing this level: resume
   renderBoard();
   render();
   say('');
 }
 
-// El reloj corre desde la primera letra del nivel hasta pasarlo, y solo con la pestaña a la vista.
+// The clock runs from the level's first letter until it's cleared, and only while the tab is visible.
 const elapsed = () => game.ms + (since === null ? 0 : performance.now() - since);
 
 function startClock() {
   if (since === null && !game.passed && !document.hidden) since = performance.now();
 }
 
-// Pasa lo corrido a game.ms (lo que se guarda) sin parar el reloj.
+// Folds the elapsed time into game.ms (what gets saved) without stopping the clock.
 function syncClock() {
   if (since === null) return;
   const now = performance.now();
@@ -151,7 +151,7 @@ function render() {
   renderClock();
 }
 
-// Resalta el camino, dibuja la línea entre los centros de las casillas y muestra la palabra en curso.
+// Highlights the path, draws the line through the tile centers and shows the word in progress.
 function renderPath() {
   const tiles = [...$('#board').querySelectorAll('.tile')];
   tiles.forEach((tile, i) => tile.classList.toggle('on', path.includes(i)));
@@ -195,11 +195,11 @@ function submit(p) {
   if (result === 'cleared') {
     fx.win();
     const g = game;
-    setTimeout(() => game === g && showCleared(), 900); // si cambió de idioma mientras tanto, no se abre
+    setTimeout(() => game === g && showCleared(), 900); // not opened if the language changed in the meantime
   }
 }
 
-// Solo cuenta el círculo central de cada casilla: así una diagonal no agarra por error una vecina.
+// Only each tile's central circle counts, so a diagonal doesn't grab a neighbor by mistake.
 function tileAt(x, y) {
   const tile = document.elementFromPoint(x, y)?.closest('#board .tile');
   if (!tile) return null;
@@ -242,20 +242,20 @@ function onPointerUp(e) {
   } else submit(path);
 }
 
-const LIGATURES = { Œ: 'OE', Æ: 'AE' }; // como en las listas (tools/build_words.py)
+const LIGATURES = { Œ: 'OE', Æ: 'AE' }; // same as the word lists (tools/build_words.py)
 
 const letterOf = key => {
   if (key.length !== 1) return null;
   const up = key.toUpperCase();
   if (LIGATURES[up]) return LIGATURES[up];
-  const c = up === 'Ñ' ? up : up.normalize('NFD')[0]; // É -> E, pero la Ñ queda
+  const c = up === 'Ñ' ? up : up.normalize('NFD')[0]; // É -> E, but Ñ stays
   return words.alphabet.includes(c) ? c : null;
 };
 
 function onKey(e) {
   if (!board || tracing || document.querySelector('dialog[open]') || e.target.tagName === 'SELECT') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.key === 'Enter' && !typed) return; // sin palabra escrita, Enter es del link o botón enfocado
+  if (e.key === 'Enter' && !typed) return; // with nothing typed, Enter belongs to the focused link or button
   if (e.key === 'Enter') {
     const p = pathFor(typed, board.letters, pendingGold());
     if (p) submit(p);
@@ -310,7 +310,7 @@ async function share() {
     $('#btn-share').textContent = t(lang, 'copied');
     setTimeout(() => ($('#btn-share').textContent = t(lang, 'share')), 1500);
   } catch {
-    prompt('', text); // sin portapapeles: que lo copie a mano
+    prompt('', text); // no clipboard: let them copy it by hand
   }
 }
 
@@ -323,7 +323,7 @@ fx.setMuted(get(storage, 'wordini:muted') === true);
 renderMute();
 
 $('#lang').onchange = e => {
-  e.target.blur(); // si no, el selector se queda con el teclado
+  e.target.blur(); // otherwise the select keeps the keyboard
   start(e.target.value);
 };
 $('#board').onpointerdown = onPointerDown;
@@ -345,7 +345,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopClock();
   else if (game.ms > 0) startClock();
 });
-addEventListener('pagehide', () => game && stopClock()); // respaldo: algunos navegadores no avisan al cerrar
+addEventListener('pagehide', () => game && stopClock()); // fallback: some browsers don't fire visibilitychange on close
 setInterval(renderClock, 250);
 
 if (!get(storage, 'wordini:help-seen')) {
@@ -353,4 +353,4 @@ if (!get(storage, 'wordini:help-seen')) {
   set(storage, 'wordini:help-seen', true);
 }
 
-start(pickLang()); // al final: los controles ya responden mientras se bajan las palabras
+start(pickLang()); // last: the controls already respond while the words download

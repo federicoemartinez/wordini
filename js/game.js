@@ -1,4 +1,4 @@
-// Reglas de la partida, sin DOM: trazado, palabras nuevas, doradas y umbral. Spec §2.
+// Game rules, no DOM: tracing, new words, gold tiles and threshold. Spec §2.
 import { isValid, points } from './board.js';
 
 export const newProgress = board => ({ found: [], goldLeft: board.gold.map(g => g.need), passed: false, ms: 0 });
@@ -8,7 +8,7 @@ export const wordOf = (board, path) => path.map(i => board.letters[i]).join('');
 const adjacent = (a, b, size) =>
   Math.abs((a % size) - (b % size)) <= 1 && Math.abs(Math.floor(a / size) - Math.floor(b / size)) <= 1;
 
-// Trazado: suma `cell` si es vecina de la última y no está usada; volver a la anteúltima borra la última.
+// Tracing: adds `cell` if it neighbors the last one and is unused; going back to the second-to-last drops the last.
 export function step(path, cell, size) {
   if (cell === path.at(-1) || (path.includes(cell) && cell !== path.at(-2))) return path;
   if (cell === path.at(-2)) return path.slice(0, -1);
@@ -16,7 +16,7 @@ export function step(path, cell, size) {
   return [...path, cell];
 }
 
-// Juega un camino. Devuelve 'short' | 'invalid' | 'dup' | 'ok' | 'cleared' ('cleared' = ok y recién pasó el nivel).
+// Plays a path. Returns 'short' | 'invalid' | 'dup' | 'ok' | 'cleared' ('cleared' = ok and the level was just cleared).
 export function play(progress, board, words, path) {
   const word = wordOf(board, path);
   if (word.length < 3) return 'short';
