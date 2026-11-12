@@ -182,8 +182,15 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 #found p, #missed { margin: .3rem 0; font-family: system-ui, sans-serif; letter-spacing: .05em; line-height: 1.5; }
 #found b { margin-right: .4rem; color: var(--magenta); }
 
-footer { margin-top: auto; padding: 2rem 1rem 1rem; text-align: center; font-size: .7rem; }
+footer { margin-top: auto; padding: 2rem 1rem 1rem; display: flex; flex-direction: column; align-items: center; gap: .7rem; font-size: .7rem; }
 footer a { color: var(--dim); }
+
+#btn-install { padding: .5rem 1rem; font-size: .8rem; }
+
+/* Cafecito link, in the footer and in the level-cleared dialog */
+.coffee { font-size: .8rem; color: var(--gold); text-decoration: none; text-shadow: 0 0 8px var(--gold); transition: text-shadow .2s; }
+.coffee:hover { text-shadow: 0 0 6px var(--gold), 0 0 18px var(--gold); }
+dialog .coffee { display: block; margin-top: 1rem; text-align: center; }
 
 dialog {
   width: min(92vw, 420px);

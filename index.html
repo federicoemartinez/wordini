@@ -4,7 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b0b14">
-  <title>Wordini</title>
+  <!-- Title and description are rewritten in the player's language by main.js; these are for crawlers that don't run JS -->
+  <title>Wordini · word game · juego de palabras · jeu de mots</title>
+  <meta name="description" content="Free word game: drag across touching letters to spell words and beat endless levels. Same board for everyone, in English, Spanish and French.">
+  <link rel="alternate" hreflang="es" href="https://federicoemartinez.github.io/wordini/?l=es">
+  <link rel="alternate" hreflang="en" href="https://federicoemartinez.github.io/wordini/?l=en">
+  <link rel="alternate" hreflang="fr" href="https://federicoemartinez.github.io/wordini/?l=fr">
+  <link rel="alternate" hreflang="x-default" href="https://federicoemartinez.github.io/wordini/">
+  <!-- Link preview (WhatsApp, Telegram, X…) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Wordini">
+  <meta property="og:title" content="Wordini">
+  <meta property="og:description" content="Juego de palabras · Word game · Jeu de mots">
+  <meta property="og:url" content="https://federicoemartinez.github.io/wordini/">
+  <meta property="og:image" content="https://federicoemartinez.github.io/wordini/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-maskable.png">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&display=swap">
@@ -39,7 +58,11 @@
     </details>
   </main>
 
-  <footer><a href="https://github.com/federicoemartinez/wordini/blob/master/CREDITS.md" target="_blank" rel="noopener" data-t="credits"></a></footer>
+  <footer>
+    <button id="btn-install" data-t="install" hidden></button>
+    <a class="coffee" href="https://cafecito.app/federicoemartinez" target="_blank" rel="noopener" data-t="coffee"></a>
+    <a href="https://github.com/federicoemartinez/wordini/blob/master/CREDITS.md" target="_blank" rel="noopener" data-t="credits"></a>
+  </footer>
 
   <dialog id="dlg-help">
     <h2 data-t="helpTitle"></h2>
@@ -60,6 +83,7 @@
       <button id="btn-missed" data-t="missedBtn"></button>
     </div>
     <p id="missed" hidden></p>
+    <a class="coffee" href="https://cafecito.app/federicoemartinez" target="_blank" rel="noopener" data-t="coffeeAsk"></a>
     <form method="dialog">
       <button data-t="keepPlaying"></button>
       <button id="btn-next-dlg" data-t="nextLevel"></button>
