@@ -1,6 +1,6 @@
 import { createBoard, pathFor, points } from './board.js';
 import { hint, newProgress, play, score, step, wordOf } from './game.js';
-import { formatTime, shareText } from './share.js';
+import { formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
 import { get, set, loadGame, saveGame, sameBoard, sigOf } from './state.js';
 import * as fx from './fx.js';
@@ -301,7 +301,7 @@ function onKey(e) {
 
 function showCleared() {
   const missed = board.missed(game.found);
-  $('#clear-score').textContent = `${t(lang, 'level')} ${game.level} · ${score(game.found)} pts · ⏱ ${formatTime(game.ms)}`;
+  $('#clear-score').textContent = levelResult(lang, game.level, score(game.found), game.ms, game.hints);
   $('#missed').textContent = missed.join(' ');
   $('#missed').hidden = true;
   $('#btn-missed').hidden = !missed.length;
@@ -316,7 +316,7 @@ function nextLevel() {
 
 async function share() {
   const url = `${location.origin}${location.pathname}?l=${lang}`;
-  const text = shareText(lang, game.level, score(game.found), game.ms, url);
+  const text = shareText(lang, game.level, score(game.found), game.ms, game.hints, url);
   if (navigator.share) {
     try {
       await navigator.share({ text });
