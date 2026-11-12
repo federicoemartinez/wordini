@@ -1,4 +1,5 @@
 import { createBoard, pathFor, points } from './board.js';
+import { define } from './define.js';
 import { hint, newProgress, play, score, step, wordOf } from './game.js';
 import { formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
@@ -23,6 +24,7 @@ let tracing = false;
 let since = null; // performance.now() since the clock started running; null = stopped
 let loadSeq = 0; // only the latest requested load may touch the screen
 let idleFrom = 0; // elapsed() at the last word found: after a minute without words the hint button nudges
+const meanings = new Map(); // `${lang}:${word}` -> meaning of a hint word; null while loading or if there's none
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -165,9 +167,23 @@ function render() {
     $('#board').children[c].append(arrow);
   });
   $('#hint').textContent = h ? h.path.map((c, i) => (i < h.shown ? board.letters[c] : '_')).join(' ') : '';
+  $('#meaning').textContent = (h && meaning(wordOf(board, h.path))) || '';
   $('#btn-hint').disabled = h ? h.shown >= h.path.length - 2 : !missed.length;
   $('#btn-next').hidden = !game.passed;
   renderClock();
+}
+
+// Meaning of a hint word: asks Wiktionary the first time and renders again if it answers.
+function meaning(word) {
+  const key = `${lang}:${word}`;
+  if (!meanings.has(key)) {
+    meanings.set(key, null);
+    define(lang, word).then(m => {
+      meanings.set(key, m);
+      if (m && game) render();
+    });
+  }
+  return meanings.get(key);
 }
 
 // Highlights the path, draws the line through the tile centers and shows the word in progress.

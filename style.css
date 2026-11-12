@@ -162,6 +162,8 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 
 #hint-row { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .8rem; }
 #hint { margin: 0; min-width: 6em; color: var(--green); text-shadow: 0 0 8px var(--green); letter-spacing: .15em; }
+#meaning { flex-basis: 100%; margin: 0; text-align: center; font-family: system-ui, sans-serif; font-size: .85rem; line-height: 1.4; color: var(--muted); }
+#meaning:empty { display: none; }
 #btn-hint { flex: none; border-color: var(--gold); box-shadow: 0 0 8px var(--gold); }
 #btn-hint:disabled { opacity: .35; cursor: default; }
 #btn-hint.nudge { animation: nudge .7s infinite alternate; }
