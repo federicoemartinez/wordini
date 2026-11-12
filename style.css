@@ -50,7 +50,7 @@ select { height: 2.5rem; background: var(--bg); }
 
 main { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1.5rem; }
 
-/* Nivel, barra de puntos hacia el umbral y contador de comunes */
+/* Level, points bar towards the threshold and common-word counter */
 #hud { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .6rem; font-size: .8rem; }
 #lvl { display: flex; flex-direction: column; gap: .15rem; }
 #level { color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
@@ -73,7 +73,7 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 .pop { position: absolute; right: .5rem; top: -.3rem; color: var(--green); text-shadow: 0 0 10px var(--green); animation: rise .9s forwards; pointer-events: none; }
 @keyframes rise { to { transform: translateY(-2rem); opacity: 0; } }
 
-/* Palabra en curso y resultado al soltar */
+/* Word in progress and result on release */
 #word { min-height: 1.6em; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; }
 #word.live { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
 #word.good { color: var(--green); text-shadow: 0 0 12px var(--green); animation: pulse .4s; }
@@ -82,7 +82,7 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 @keyframes pulse { 50% { transform: scale(1.15); } }
 @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 
-/* La grilla: el tamaño de letra sigue al ancho de la grilla (unidades de contenedor) */
+/* The grid: font size follows the grid width (container units) */
 #board {
   --n: 4;
   position: relative;
@@ -114,6 +114,22 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 .tile.gold { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 8px var(--gold), 0 0 18px var(--gold); text-shadow: 0 0 8px var(--gold); }
 .tile.gold.done { border-color: var(--green); color: var(--green); box-shadow: 0 0 8px var(--green); text-shadow: 0 0 8px var(--green); }
 .tile.gold.on { border-color: var(--magenta); }
+/* Hint tiles: a blinking outline, so it doesn't fight the border/shadow of .on and .gold */
+.tile.hint { outline: 2px solid var(--green); outline-offset: 2px; animation: blink .8s infinite alternate; }
+@keyframes blink { to { outline-color: transparent; } }
+/* Arrow towards the next tile of the hint: rotated about the tile's center, then pushed to its edge */
+.arrow {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: .55em;
+  color: var(--green);
+  text-shadow: 0 0 6px var(--green), 0 0 12px var(--green);
+  transform: rotate(var(--a)) translateX(36%);
+  pointer-events: none;
+}
 
 .badge {
   position: absolute;
@@ -143,6 +159,15 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
   opacity: .55;
   filter: drop-shadow(0 0 6px var(--magenta));
 }
+
+#hint-row { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .8rem; }
+#hint { margin: 0; min-width: 6em; color: var(--green); text-shadow: 0 0 8px var(--green); letter-spacing: .15em; }
+#meaning { flex-basis: 100%; margin: 0; text-align: center; font-family: system-ui, sans-serif; font-size: .85rem; line-height: 1.4; color: var(--muted); }
+#meaning:empty { display: none; }
+#btn-hint { flex: none; border-color: var(--gold); box-shadow: 0 0 8px var(--gold); }
+#btn-hint:disabled { opacity: .35; cursor: default; }
+#btn-hint.nudge { animation: nudge .7s infinite alternate; }
+@keyframes nudge { to { transform: scale(1.15); box-shadow: 0 0 14px var(--gold), 0 0 30px var(--gold); } }
 
 #btn-next, #btn-share {
   color: var(--green);

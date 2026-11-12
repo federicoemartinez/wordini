@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Genera words/{lang}.json: todas las formas de Hunspell (LibreOffice) + las comunes según wordfreq.
+"""Genera words/{lang}.json: todas las formas de Hunspell (LibreOffice) y tools/extra + las comunes según wordfreq.
 
 Uso: tools/.venv/bin/python tools/build_words.py es en fr
 """
@@ -16,11 +16,11 @@ from spylls.hunspell.algo.capitalization import Type
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ROOT / 'tools' / 'sources'
 LIBRE = 'https://raw.githubusercontent.com/LibreOffice/dictionaries/master/'
-# idioma: (alfabeto, diccionario sin extensión, tienen que entrar, tienen que quedar afuera)
+# idioma: (alfabeto, diccionarios sin extensión, tienen que entrar, tienen que quedar afuera)
 LANGS = {
-    'es': ('ABCDEFGHIJKLMNÑOPQRSTUVWXYZ', 'es/es_ES', ['CASAS', 'COMI', 'DAMELO', 'ÑANDU'], ['NUGENT', 'KWH', 'PARTY']),
-    'en': ('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'en/en_US', ['CATS', 'RUNNING', 'QUIZZES'], ['NUGENT', 'KWH', 'GPS']),
-    'fr': ('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'fr_FR/dictionaries/fr', ['CHEVAUX', 'MANGEAIENT', 'ETE', 'COEUR'], ['NUGENT', 'KWH', 'PARTY']),
+    'es': ('ABCDEFGHIJKLMNÑOPQRSTUVWXYZ', ['es/es_ES', 'es/es_AR'], ['CASAS', 'COMI', 'DAMELO', 'ÑANDU', 'LABURO', 'BONDI'], ['NUGENT', 'KWH', 'PARTY']),
+    'en': ('ABCDEFGHIJKLMNOPQRSTUVWXYZ', ['en/en_US'], ['CATS', 'RUNNING', 'QUIZZES'], ['NUGENT', 'KWH', 'GPS']),
+    'fr': ('ABCDEFGHIJKLMNOPQRSTUVWXYZ', ['fr_FR/dictionaries/fr'], ['CHEVAUX', 'MANGEAIENT', 'ETE', 'COEUR'], ['NUGENT', 'KWH', 'PARTY']),
 }
 MIN_LEN, MAX_LEN = 3, 12
 N_COMMON = 20_000
@@ -55,15 +55,14 @@ def apply_pfx(word, p):
         return p.add + word[len(p.strip):]
 
 
-def expand(d, blocked_stem):
+def expand(d):
     """Todas las formas del diccionario: raíz, +sufijo, +sufijo encadenado, +prefijo y prefijo×sufijo."""
     aff = d.aff
     # NOSUGGEST marca insultos (en) y unidades o abreviaturas (fr): nada de eso sirve para jugar
     skip = {f for f in (aff.FORBIDDENWORD, aff.ONLYINCOMPOUND, aff.NOSUGGEST) if f}
     needs_affix = lambda flags: aff.NEEDAFFIX and aff.NEEDAFFIX in flags
     for w in d.dic.words:
-        # con mayúscula = nombre propio; raíz bloqueada = se saltean también todas sus flexiones
-        if w.captype != Type.NO or w.flags & skip or blocked_stem(w.stem):
+        if w.captype != Type.NO or w.flags & skip:  # con mayúscula = nombre propio
             continue
         if not needs_affix(w.flags):
             yield w.stem
@@ -91,14 +90,14 @@ def expand(d, blocked_stem):
 
 
 def build(lang):
-    alphabet, dic, must_in, must_out = LANGS[lang]
+    alphabet, dics, must_in, must_out = LANGS[lang]
     ok = lambda w: MIN_LEN <= len(w) <= MAX_LEN and all(c in alphabet for c in w)
 
-    blocklist = (ROOT / 'tools' / 'blocklist' / f'{lang}.txt').read_text(encoding='utf-8')
-    blocked = {normalize(l.strip(), lang) for l in blocklist.splitlines() if l.strip()}
-
-    forms = expand(dictionary(dic), lambda stem: normalize(stem, lang) in blocked)
-    valid = {n for form in forms if ok(n := normalize(form, lang)) and n not in blocked}
+    extra = ROOT / 'tools' / 'extra' / f'{lang}.txt'  # palabras que no trae ningún diccionario, una por línea
+    forms = extra.read_text(encoding='utf-8').split() if extra.exists() else []
+    for dic in dics:
+        forms += expand(dictionary(dic))
+    valid = {n for form in forms if ok(n := normalize(form, lang))}
 
     common = {}  # dict: conserva el orden de frecuencia
     for w in wordfreq.top_n_list(lang, TOP_FREQ):
@@ -113,7 +112,6 @@ def build(lang):
 
     assert all(ok(w) for w in valid), 'palabra con largo o letras inválidas'
     assert set(common) <= valid, 'common no está incluida en valid'
-    assert not valid & blocked, 'palabra bloqueada'
     assert len(common) >= 10_000, f'muy pocas comunes: {len(common)}'
     assert len(blob.encode()) < 8_000_000, f'JSON demasiado grande: {len(blob.encode())} bytes'
     assert all(w in valid for w in must_in), [w for w in must_in if w not in valid]

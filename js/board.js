@@ -1,12 +1,12 @@
-// Canchas deterministas: el mismo (idioma, nivel) da la misma cancha en cualquier navegador. Spec §4.
+// Deterministic boards: the same (language, level) gives the same board in any browser. Spec §4.
 
-// Perillas de dificultad (spec §4.6). Se calibran con `node tools/levels.mjs <lang>`.
-const BIG_FROM = 11; // desde este nivel la grilla es 5×5
-const MIN_COMMON = { 4: 25, 5: 50 }; // palabras comunes mínimas por cancha
-const LONG = { 4: 6, 5: 7 }; // largo mínimo de la "palabra premio"
+// Difficulty knobs (spec §4.6). Calibrate with `node tools/levels.mjs <lang>`.
+const BIG_FROM = 11; // from this level on the grid is 5×5
+const MIN_COMMON = { 4: 25, 5: 50 }; // minimum common words per board
+const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
 const GOLD_FROM = 4;
 const MAX_TRIES = 500;
-const POINTS = [0, 0, 0, 1, 2, 4, 7, 11]; // por largo; 8 o más = 16
+const POINTS = [0, 0, 0, 1, 2, 4, 7, 11]; // by length; 8 or more = 16
 
 const pct = level => (level < BIG_FROM ? 0.2 + 0.025 * (level - 1) : Math.min(0.45, 0.25 + 0.01 * (level - BIG_FROM)));
 const maxGold = level => (level < GOLD_FROM ? 0 : level <= 10 ? 1 : level <= 20 ? 2 : 3);
@@ -28,7 +28,7 @@ function mulberry32(a) {
   };
 }
 
-// Primera posición de `list` (ordenada) con un valor >= s.
+// First index in the sorted `list` whose value is >= s.
 function lowerBound(list, s) {
   let lo = 0;
   let hi = list.length;
@@ -43,7 +43,7 @@ function lowerBound(list, s) {
 export const isValid = (words, w) => words.valid[lowerBound(words.valid, w)] === w;
 const isPrefix = (words, p) => words.valid[lowerBound(words.valid, p)]?.startsWith(p) ?? false;
 
-// Vecinas de cada casilla (8 direcciones) en una grilla size×size numerada por filas.
+// Neighbors of each tile (8 directions) in a size×size grid numbered row by row.
 export function neighbors(size) {
   return Array.from({ length: size * size }, (_, i) => {
     const r = Math.floor(i / size);
@@ -60,7 +60,7 @@ export function neighbors(size) {
   });
 }
 
-// `common` como Set y pesos de letras, una vez por lista.
+// `common` as a Set plus letter weights, computed once per list.
 const prepared = new WeakMap();
 function prepare(words) {
   if (prepared.has(words)) return prepared.get(words);
@@ -79,7 +79,7 @@ function weightedLetter(rand, d) {
   return d.letters[d.cumulative.findIndex(c => x < c)];
 }
 
-// Todas las palabras de `valid` que se pueden armar, y por casilla las comunes que pueden pasar por ella.
+// Every `valid` word that can be traced, and per tile the common words that can go through it.
 export function solve(letters, words) {
   const d = prepare(words);
   const adj = neighbors(Math.sqrt(letters.length));
@@ -101,7 +101,7 @@ export function solve(letters, words) {
   return { found, through };
 }
 
-// Camino para `word` que pase por la mayor cantidad posible de casillas de `prefer`; null si no se puede armar.
+// Path for `word` through as many `prefer` tiles as possible; null if it can't be traced.
 export function pathFor(word, letters, prefer = []) {
   const adj = neighbors(Math.sqrt(letters.length));
   let best = null;
@@ -122,7 +122,7 @@ export function pathFor(word, letters, prefer = []) {
   return best;
 }
 
-// Doradas: casillas por las que pasan al menos 3×need comunes. Si no alcanzan, baja need o pone menos.
+// Gold tiles: tiles with at least 3×need common words through them. If there aren't enough, lower need or place fewer.
 function pickGold(rand, level, through) {
   const n = maxGold(level) && rand() < 0.5 ? 1 + Math.floor(rand() * maxGold(level)) : 0;
   const gold = [];

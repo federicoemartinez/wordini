@@ -1,4 +1,4 @@
-// Efectos: sonido chiptune sintetizado (sin archivos), vibración y confetti. Si algo falla, el juego sigue.
+// Effects: synthesized chiptune sound (no files), vibration and confetti. If anything fails, the game goes on.
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CONFETTI = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/+esm';
 let ctx;
@@ -6,7 +6,7 @@ let ctx;
 export let muted = false;
 export const setMuted = m => (muted = m);
 
-// Los navegadores solo dejan sonar audio creado o reanudado durante un gesto del usuario.
+// Browsers only play audio created or resumed during a user gesture.
 export function unlock() {
   if (muted) return;
   try {
@@ -32,7 +32,7 @@ function beep(freq, duration, type, delay = 0, volume = 0.06) {
   } catch {}
 }
 
-// Un "tic" por casilla, cada vez más agudo a medida que la palabra se alarga.
+// One "tick" per tile, higher-pitched as the word gets longer.
 export function tick(n) {
   beep(440 + 90 * n, 0.04, 'square', 0, 0.03);
   navigator.vibrate?.(10);
