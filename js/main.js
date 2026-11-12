@@ -398,5 +398,14 @@ if (!get(storage, 'wordini:help-seen')) {
   set(storage, 'wordini:help-seen', true);
 }
 
+// Chrome (Android and desktop) fires this when the game can be installed as an app: our button instead of its banner
+addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  $('#btn-install').hidden = false;
+  $('#btn-install').onclick = () => {
+    e.prompt();
+    $('#btn-install').hidden = true; // the event works once; if they say no, Chrome fires it again on a later visit
+  };
+});
 navigator.serviceWorker?.register('sw.js'); // a new version shows up on the next load (see sw.js)
 start(pickLang()); // last: the controls already respond while the words download

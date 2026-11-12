@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Icon for Android (and iOS) home screens, which crop it to their own shape: full-bleed background
+       with icon.svg inside the safe zone, the central circle of 80%. How to regenerate the PNGs: see README. -->
+  <defs>
+    <radialGradient id="bg" cx=".5" cy="0" r="1">
+      <stop offset="0" stop-color="#2a1450"/>
+      <stop offset=".75" stop-color="#0b0b14"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" fill="url(#bg)"/>
+  <image href="../icon.svg" x="13" y="13" width="38" height="38"/>
+</svg>

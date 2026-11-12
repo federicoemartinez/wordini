@@ -39,7 +39,13 @@ node tools/levels.mjs es 1 50   # language, from, to
 
 The site is published with GitHub Pages from the root of `master`, so every push to `master` redeploys it. Any other static host works too (e.g. Cloudflare Pages): publish the repo root as is. Both serve `words/*.json` compressed (~1 MB for Spanish).
 
-`sw.js` makes every load ask the server whether each file changed, so players get a new version on their next load, all of it at once, without clearing the cache (progress lives in `localStorage` and isn't touched). The link preview image `og.jpg` is a screenshot of `tools/og.html`.
+`sw.js` makes every load ask the server whether each file changed, so players get a new version on their next load, all of it at once, without clearing the cache (progress lives in `localStorage` and isn't touched). The images are screenshots taken with Chromium's `chrome-headless-shell`, from the repo root:
+
+```bash
+chrome-headless-shell --hide-scrollbars --virtual-time-budget=5000 --window-size=1200,630 --screenshot=og.jpg tools/og.html
+chrome-headless-shell --default-background-color=00000000 --window-size=512,512 --screenshot=icon.png icon.svg
+chrome-headless-shell --window-size=512,512 --screenshot=icon-maskable.png tools/icon-maskable.svg
+```
 
 ## See a board's words while developing
 
