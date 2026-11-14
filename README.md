@@ -15,8 +15,11 @@ python3 -m http.server 8000   # then open http://localhost:8000
 ## Tests
 
 ```bash
-npm test   # = node --test (Node ≥ 22), no dependencies
+npm test               # = node --test (Node ≥ 22), no dependencies
+npm i && npm run lint  # ESLint
 ```
+
+GitHub Actions runs both on every push to `master` and on every PR.
 
 ## Regenerate the word lists
 
