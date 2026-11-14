@@ -51,6 +51,20 @@ export function bad() {
   beep(150, 0.15, 'sawtooth', 0, 0.05);
 }
 
+// The board is already drawn in its new layout (board.js turnCell), so it starts from where it was and turns into
+// place while each tile turns the other way: the letters stay upright, like the cabins of a Ferris wheel.
+export function turn(board, t) {
+  [784, 659, 523, 392, 523, 659, 784].forEach((f, k) => beep(f, 0.08, 'square', 0.25 + k * 0.07, 0.03));
+  navigator.vibrate?.([30, 40, 30]);
+  if (calm) return;
+  const deg = [0, 90, 180, -90][t % 4];
+  const s = t >= 4 ? -1 : 1;
+  const opts = { duration: 1100, easing: 'cubic-bezier(.5, -.4, .3, 1.4)' };
+  const done = 'scaleX(1) rotate(0deg)';
+  board.animate([{ transform: `scaleX(${s}) rotate(${-deg}deg)` }, { transform: done }], opts);
+  for (const tile of board.querySelectorAll('.tile')) tile.animate([{ transform: `rotate(${deg}deg) scaleX(${s})` }, { transform: done }], opts);
+}
+
 export function win() {
   [523, 659, 784, 1047].forEach((f, k) => beep(f, 0.25, 'triangle', 0.15 + k * 0.09, 0.08));
   if (calm) return;

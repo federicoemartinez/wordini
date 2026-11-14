@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hint, newProgress, play, score, step, wordOf } from '../js/game.js';
+import { TURN_FROM } from '../js/board.js';
+import { hint, newProgress, play, score, step, turn, wordOf } from '../js/game.js';
 
 // C A S A
 // M O R S
@@ -115,4 +116,18 @@ test('hint: encontrar la palabra la borra; sin comunes que falten no hay pista',
   p.found.push('AMOR', 'CASA', 'ROMA');
   assert.equal(hint(p, b), false);
   assert.equal(p.hint, undefined);
+});
+
+test('turn: gira una sola vez, desde TURN_FROM y al llegar a la mitad sin haber pasado', () => {
+  const b = { ...board([], 10), size: 4 };
+  const g = { level: TURN_FROM, ...newProgress(b), found: ['CASA', 'AMOR'] }; // 4 pts: menos de la mitad
+  assert.equal(turn(g, b), false);
+  g.found.push('MAS'); // 5 pts: la mitad justa
+  assert.equal(turn({ ...g, level: TURN_FROM - 1 }, b), false);
+  assert.equal(turn({ ...g, passed: true }, b), false);
+  g.hint = { path: [0, 1, 2], shown: 1 };
+  assert.equal(turn(g, b), true);
+  assert.ok(Number.isInteger(g.turn) && g.turn >= 1 && g.turn <= 7);
+  assert.notDeepEqual(g.hint.path, [0, 1, 2]); // la pista se mueve con las letras
+  assert.equal(turn(g, b), false); // ya giró
 });

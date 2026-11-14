@@ -1,5 +1,5 @@
 // Game rules, no DOM: tracing, new words, gold tiles and threshold. Spec §2.
-import { isValid, pathFor, points } from './board.js';
+import { isValid, pathFor, points, TURN_FROM, turnCell } from './board.js';
 
 export const newProgress = board => ({ found: [], goldLeft: board.gold.map(g => g.need), passed: false, ms: 0, hints: 0 });
 export const score = found => found.reduce((n, w) => n + points(w), 0);
@@ -48,5 +48,15 @@ export function hint(progress, board) {
     progress.hint = { path: paths.reduce((a, b) => (rank(b) < rank(a) ? b : a)), shown: 1 };
   }
   progress.hints++;
+  return true;
+}
+
+// From TURN_FROM on, the first word that reaches half the target turns and/or mirrors the board, once, so a
+// memorized layout stops helping. Picks the symmetry (turnCell) and moves the hint with the letters; the caller
+// applies turnBoard. Returns whether it turned.
+export function turn(game, board) {
+  if (game.level < TURN_FROM || game.turn || game.passed || 2 * score(game.found) < board.threshold) return false;
+  game.turn = 1 + Math.floor(Math.random() * 7);
+  if (game.hint) game.hint.path = game.hint.path.map(turnCell(board.size, game.turn));
   return true;
 }

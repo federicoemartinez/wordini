@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createBoard, isValid, neighbors, pathFor, points, solve } from '../js/board.js';
+import { createBoard, isValid, neighbors, pathFor, points, solve, turnBoard, turnCell } from '../js/board.js';
 
 const LANGS = ['es', 'en', 'fr'];
 const words = Object.fromEntries(
@@ -115,6 +115,37 @@ test('pathFor prefiere el camino que pasa por las casillas pedidas', () => {
   assert.ok(pathFor('ASA', letters, [4]).includes(4));
   assert.ok(pathFor('ASA', letters, [2]).includes(2));
   assert.equal(pathFor('ASAS', letters), null); // hay una sola S
+});
+
+test('turnCell: giro horario y espejo en 3×3', () => {
+  // 0 1 2      giro: 6 3 0     espejo: 2 1 0
+  // 3 4 5            7 4 1             5 4 3
+  // 6 7 8            8 5 2             8 7 6
+  const layout = t => {
+    const out = [];
+    for (let i = 0; i < 9; i++) out[turnCell(3, t)(i)] = i;
+    return out;
+  };
+  assert.deepEqual(layout(1), [6, 3, 0, 7, 4, 1, 8, 5, 2]);
+  assert.deepEqual(layout(2), [8, 7, 6, 5, 4, 3, 2, 1, 0]);
+  assert.deepEqual(layout(4), [2, 1, 0, 5, 4, 3, 8, 7, 6]);
+  assert.deepEqual(layout(0), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test('turnBoard: las 7 simetrías mueven todo y dejan las mismas palabras', () => {
+  for (const l of LANGS) {
+    const b = createBoard(l, 25, words[l]);
+    const before = [...solve(b.letters, words[l]).found].sort();
+    for (let t = 1; t < 8; t++) {
+      const to = turnCell(b.size, t);
+      const c = turnBoard(b, t);
+      assert.equal(new Set(b.letters.map((_, i) => to(i))).size, b.letters.length, `${l} ${t}: no es una permutación`);
+      b.letters.forEach((x, i) => assert.equal(c.letters[to(i)], x));
+      assert.deepEqual(c.gold, b.gold.map(g => ({ ...g, cell: to(g.cell) })));
+      assert.deepEqual([...solve(c.letters, words[l]).found].sort(), before, `${l} ${t}`);
+      assert.deepEqual(c.missed([]), b.missed([]));
+    }
+  }
 });
 
 test('rendimiento: createBoard 5×5 tarda menos de 50 ms en promedio', () => {

@@ -1,7 +1,7 @@
-import { createBoard, isValid, pathFor, points } from './board.js';
+import { createBoard, isValid, pathFor, points, turnBoard } from './board.js';
 import { define } from './define.js';
 import { claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, join, listen, other, phase, rematch, scores, timeLeft, wordsOf } from './duel.js';
-import { hint, newProgress, play, score, step, wordOf } from './game.js';
+import { hint, newProgress, play, score, step, turn, wordOf } from './game.js';
 import { duelText, formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
 import { get, set, loadGame, saveGame, sameBoard, sigOf } from './state.js';
@@ -70,18 +70,19 @@ function enterLevel(saved) {
   game = sameBoard(saved, board) ? saved : { level: saved.level, sig: sigOf(board), ...newProgress(board) };
   game.ms ??= 0; // games saved before the stopwatch existed
   game.hints ??= 0; // ...or hints
+  if (game.turn) board = turnBoard(board, game.turn); // after sameBoard: the saved sig is the unturned board's
   idleFrom = game.ms;
   saveGame(storage, lang, game);
   path = [];
   typed = '';
   since = null;
-  if (game.ms > 0) startClock(); // was already playing this level: resume
+  startClock(); // from the moment the board is visible: otherwise you could study it for free
   renderBoard();
   render();
   say('');
 }
 
-// The clock runs from the level's first letter until it's cleared, and only while the tab is visible.
+// The clock runs from when the board is shown until it's cleared, and only while the tab is visible.
 const elapsed = () => game.ms + (since === null ? 0 : performance.now() - since);
 
 function startClock() {
@@ -237,12 +238,18 @@ function submit(p) {
   }
   if (result === 'cleared') stopClock();
   else syncClock();
+  const turned = turn(game, board);
+  if (turned) board = turnBoard(board, game.turn);
   saveGame(storage, lang, game);
   idleFrom = elapsed();
-  say(word, 'good');
+  say(turned ? `${word} · ${t(lang, 'turned')}` : word, 'good');
   pop(`+${points(word)}`);
   fx.good(word.length);
   if (game.goldLeft.join() !== goldBefore) fx.gold();
+  if (turned) {
+    renderBoard();
+    fx.turn($('#board'), game.turn);
+  }
   render();
   if (result === 'cleared') {
     fx.win();
@@ -625,7 +632,7 @@ for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, fx.un
 document.addEventListener('visibilitychange', () => {
   if (!game) return;
   if (document.hidden) stopClock();
-  else if (game.ms > 0) startClock();
+  else startClock();
 });
 addEventListener('pagehide', () => game && stopClock()); // fallback: some browsers don't fire visibilitychange on close
 setInterval(renderClock, 250);

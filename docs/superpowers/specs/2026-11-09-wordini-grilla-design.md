@@ -47,7 +47,7 @@ Juego de palabras adictivo y multiidioma (es, en, fr), 100% estático y sin back
 
 ### 2.4.1 Cronómetro
 
-- Arranca con la primera letra que se toca o se escribe en el nivel. Cargar las palabras o leer la ayuda no cuenta.
+- Arranca apenas se muestra el tablero (cargar las palabras no cuenta). Antes arrancaba con la primera letra, pero así se podía mirar el tablero gratis y después marcar todo de corrido.
 - Se frena al pasar el nivel. Si después se sigue jugando, queda fijo en el tiempo que se tardó en pasarlo.
 - Se pausa mientras la pestaña no está a la vista.
 - El tiempo se guarda con la partida: al recargar sigue desde donde estaba, y cada idioma conserva el suyo.
