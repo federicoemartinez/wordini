@@ -451,7 +451,7 @@ function renderDuel() {
   const s = scores(room, me);
   $('#duel-hud').hidden = $('#found-box').hidden = false;
   $('#duel-me b').textContent = `${t(lang, 'you')} ${s.mine}`;
-  $('#duel-rival b').textContent = `${t(lang, 'rival')} ${s.theirs} (${s.nTheirs})`;
+  $('#duel-rival b').textContent = `${t(lang, 'rival')} ${s.theirs}`;
   renderFound(wordsOf(room, me));
   renderDuelClock();
   if (duel.ended) renderDuelEnd();

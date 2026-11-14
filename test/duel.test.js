@@ -68,12 +68,12 @@ test('phase y timeLeft en los bordes', () => {
   assert.equal(timeLeft(room, start + LENGTH + 5000), 0);
 });
 
-test('wordsOf, other y scores', () => {
+test('wordsOf, other y scores (solo puntos: se gana por puntos)', () => {
   const room = { words: { SOL: 'a', PERRO: 'b', CASA: 'a', MAR: 'b', AMOR: 'b' } };
   assert.deepEqual(wordsOf(room, 'a'), ['CASA', 'SOL']);
   assert.deepEqual(wordsOf({}, 'a'), []);
   assert.equal(other('a'), 'b');
   assert.equal(other('b'), 'a');
-  assert.deepEqual(scores(room, 'a'), { mine: 3, theirs: 7, nMine: 2, nTheirs: 3 });
-  assert.deepEqual(scores(room, 'b'), { mine: 7, theirs: 3, nMine: 3, nTheirs: 2 });
+  assert.deepEqual(scores(room, 'a'), { mine: 3, theirs: 7 });
+  assert.deepEqual(scores(room, 'b'), { mine: 7, theirs: 3 });
 });

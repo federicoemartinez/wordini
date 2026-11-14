@@ -20,10 +20,8 @@ export const duelBoard = (code, room, words) => ({ ...createBoard(room.lang, BIG
 export const other = me => (me === 'a' ? 'b' : 'a');
 export const wordsOf = (room, who) => Object.keys(room?.words ?? {}).filter(w => room.words[w] === who).sort();
 
-export function scores(room, me) {
-  const [mine, theirs] = [wordsOf(room, me), wordsOf(room, other(me))];
-  return { mine: score(mine), theirs: score(theirs), nMine: mine.length, nTheirs: theirs.length };
-}
+// Points only: that's what wins.
+export const scores = (room, me) => ({ mine: score(wordsOf(room, me)), theirs: score(wordsOf(room, other(me))) });
 
 // 'waiting' (no rival yet), 'countdown', 'playing' or 'over', at server time `now`.
 export function phase(room, now) {

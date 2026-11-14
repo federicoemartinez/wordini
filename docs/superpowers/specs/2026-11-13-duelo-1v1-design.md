@@ -26,7 +26,7 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
 - **Bloqueo:** cada palabra la puede marcar **una sola persona**: la primera que la escribe en el servidor (§4.3).
   - Si intentás una que ya marcó el rival: "🔒 CASA · la marcó tu rival", con el sonido de error. No resta.
   - Si intentás una que ya marcaste vos: el aviso de siempre, "ya la encontraste".
-- **Qué ves del rival durante la partida:** su puntaje y cuántas palabras lleva, en vivo, pero **no cuáles son**. Cuando marca una, su puntaje late y aparece "+N".
+- **Qué ves del rival durante la partida:** su puntaje en vivo (solo los puntos, que es lo que gana: con la cantidad de palabras al lado no se entendía), pero **no cuáles son**. Cuando marca una, su puntaje late y aparece "+N".
 - **No hay:** pistas, umbral ni niveles.
 - **Resultado:** ganaste, perdiste o empate, según los puntos. Recién ahí se ven las palabras de los dos.
 - **Progreso de los niveles:** el duelo no lo toca. El cronómetro del nivel queda pausado mientras dura el duelo.
@@ -43,7 +43,7 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
    - si la sala ya tiene dos jugadores: "Esta partida ya empezó";
    - si no existe: "Ese desafío no existe o ya venció".
 3. **3‑2‑1.** Apenas entra el segundo, los dos ven la cuenta regresiva en grande y la grilla todavía no responde.
-4. **Partida.** El HUD del duelo reemplaza al de los niveles: `⏳ 4:12   TÚ 23   RIVAL 18 (7)` (los textos en español usan tú, como el resto del juego). Debajo de la grilla se ven tus palabras. No hay botón para abandonar: son 5 minutos, y para irse alcanza con salir de la página.
+4. **Partida.** El HUD del duelo reemplaza al de los niveles: `⏳ 4:12   TÚ 23   RIVAL 18` (los textos en español usan tú, como el resto del juego). Debajo de la grilla se ven tus palabras. No hay botón para abandonar: son 5 minutos, y para irse alcanza con salir de la página.
 5. **Fin.** A los 5:00 la grilla deja de responder y se abre el diálogo de resultado:
    - "🏆 ¡Ganaste 48 a 31!" / "Perdiste 31 a 48" / "Empate 40 a 40";
    - tus palabras y las del rival;
@@ -197,7 +197,7 @@ Van marcados con `ponytail:` en el código.
 | Archivo | Cambio |
 |---|---|
 | `js/board.js` | `createBoard(lang, level, words, seed = \`${lang}:${level}\`)`. Se exporta `BIG_FROM`. El duelo llama `{ ...createBoard(room.lang, BIG_FROM, words, \`duel:${code}:${room.created}\`), gold: [] }` y, a los 2:30, `turnBoard(board, turnOf(room))`. |
-| `js/duel.js` (nuevo) | **Sin DOM, se puede probar:** `newCode(rand)`, `duelBoard(code, room, words)`, `applyEvent(room, type, {path, data})` (aplica `put` y `patch` sobre el objeto de la sala), `phase(room, now)`, `timeLeft(room, now)`, `halfway(room)` (hora del giro), `turnOf(room)` (simetría 1-7), `scores(room, me)` (devuelve `{mine, theirs, nMine, nTheirs}`), `wordsOf(room, who)`, `other(me)`. **Red:** `getRoom(code)`, `create(lang)` (barre y después crea, reintentando si el código ya existe), `join(code)` (devuelve la hora de `joined` o `null`), `clockOffset(code, me)`, `claim(code, word, me)`, `listen(code, onRoom)` (devuelve una función para cerrar el `EventSource`), `rematch(code, lang, next)`, y `setDB(url)` solo para correr el smoke test contra el emulador. |
+| `js/duel.js` (nuevo) | **Sin DOM, se puede probar:** `newCode(rand)`, `duelBoard(code, room, words)`, `applyEvent(room, type, {path, data})` (aplica `put` y `patch` sobre el objeto de la sala), `phase(room, now)`, `timeLeft(room, now)`, `halfway(room)` (hora del giro), `turnOf(room)` (simetría 1-7), `scores(room, me)` (devuelve `{mine, theirs}`), `wordsOf(room, who)`, `other(me)`. **Red:** `getRoom(code)`, `create(lang)` (barre y después crea, reintentando si el código ya existe), `join(code)` (devuelve la hora de `joined` o `null`), `clockOffset(code, me)`, `claim(code, word, me)`, `listen(code, onRoom)` (devuelve una función para cerrar el `EventSource`), `rematch(code, lang, next)`, y `setDB(url)` solo para correr el smoke test contra el emulador. |
 | `js/main.js` | Estado `duel = { code, me, room, offset, pending }`, o `null` en los niveles. **Al entrar a un duelo:** `stopClock()` del nivel, se arma la cancha del duelo y se reutiliza `renderBoard()`. **Durante el duelo:** `submit()` va por §4.3; `render()` muestra `#duel-hud` y oculta el HUD de los niveles, las pistas y el selector de idioma; el trazado y el teclado no responden fuera de `playing`; `renderClock()` también maneja el 3‑2‑1, el tiempo que queda y el pase a `over`. **Al arrancar:** se lee `?vs=`. |
 | `index.html`, `style.css` | El botón ⚔️ en el header, `#duel-hud`, `#dlg-duel` (link, Compartir, "Esperando rival…" y los errores), `#dlg-duel-end` (resultado, palabras de los dos y botones), y el estilo grande del 3‑2‑1 en `#word`. |
 | `js/i18n.js` | Textos nuevos en es/en/fr: desafiar, esperando, sin sala, partida empezada, sin conexión, bloqueada, vos, rival, ganaste/perdiste/empate, revancha, el rival quiere revancha, jugar, volver, tus palabras, sus palabras. |
