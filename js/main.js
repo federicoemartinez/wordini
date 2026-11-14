@@ -402,15 +402,16 @@ async function enterDuel(code) {
     const room = await getRoom(code);
     if (d !== duel) return;
     if (!room?.created) return duelMessage('duelNoRoom');
+    const loaded = await fetchWords(room.lang); // before taking the seat: joining starts the countdown
+    if (d !== duel) return;
+    if (!loaded) return duelMessage('loadError');
     if (!d.me) {
-      if (room.joined || !(await join(code))) return duelMessage('duelFull');
+      if (room.joined || !(room.joined = await join(code))) return duelMessage('duelFull');
       d.me = 'b';
       set(storage, 'wordini:duel', { code, me: 'b' });
     }
     d.offset = await clockOffset(code, d.me);
-    const loaded = await fetchWords(room.lang);
     if (d !== duel) return;
-    if (!loaded) return say(t(room.lang, 'loadError'));
     lang = room.lang;
     words = loaded;
     document.documentElement.lang = $('#lang').value = lang;
@@ -530,6 +531,9 @@ function endDuel() {
   const { mine, theirs } = scores(duel.room, duel.me);
   if (mine > theirs) fx.win();
   renderDuelEnd();
+  // Once more after the server's 2 s of grace, in case the stream died: the result mustn't miss a word
+  const d = duel;
+  setTimeout(() => getRoom(d.code).then(r => onDuelRoom(d, r), () => {}), 2500);
 }
 
 // Drawn again when a last-second word or the rival's rematch arrives.
@@ -546,6 +550,7 @@ function renderDuelEnd() {
 
 async function onRematch() {
   const d = duel;
+  $('#btn-rematch').disabled = true; // a double tap would make two rooms
   try {
     const r = await rematch(d.code, lang, d.room.next);
     if (d !== duel) return;
@@ -556,6 +561,8 @@ async function onRematch() {
   } catch {
     $('#duel-ask').textContent = t(lang, 'duelOffline');
     $('#duel-ask').hidden = false;
+  } finally {
+    $('#btn-rematch').disabled = false;
   }
 }
 
@@ -606,6 +613,8 @@ $('#btn-duel-result').onclick = e => {
   share(duelText(lang, mine, theirs, gameUrl()), e.target);
 };
 $('#dlg-duel').oncancel = $('#dlg-duel-end').oncancel = e => e.preventDefault(); // Esc doesn't leave: their buttons do
+// ...but a back gesture or a second Esc can still close it: an error message closed that way leaves too
+$('#dlg-duel').onclose = () => duel && !board && leaveDuel();
 $('#btn-mute').onclick = () => {
   fx.setMuted(!fx.muted);
   set(storage, 'wordini:muted', fx.muted);

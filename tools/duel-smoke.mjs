@@ -23,8 +23,8 @@ await check(`crea la sala ${code} en ${DB}`, async () => {
 await check('la hora del servidor vuelve en la respuesta', async () => assert.ok(Number.isFinite(await clockOffset(code, 'a'))));
 await check('no se marca nada sin rival', async () => assert.equal(await claim(code, 'CASA', 'a'), false));
 await check('entra el segundo y no entra un tercero', async () => {
-  assert.equal(await join(code), true);
-  assert.equal(await join(code), false);
+  assert.equal(typeof (await join(code)), 'number');
+  assert.equal(await join(code), null);
 });
 await check('no se marca nada en la cuenta regresiva', async () => assert.equal(await claim(code, 'CASA', 'a'), false));
 await new Promise(r => setTimeout(r, 3200));
@@ -68,6 +68,6 @@ await check('revancha: el primero arma la sala y el otro entra a esa', async () 
 });
 await check('una sala que no existe', async () => {
   assert.equal(await getRoom('ZZZZZ'), null);
-  assert.equal(await join('ZZZZZ'), false);
+  assert.equal(await join('ZZZZZ'), null);
 });
 console.log('todo bien');

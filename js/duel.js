@@ -54,9 +54,10 @@ export function applyEvent(room, type, { path, data }) {
 
 const url = (path, query = '') => `${DB}/${path}.json${query}`;
 
-// A write. Returns the server's answer, or null if the rules rejected it (taken, out of time…). No network throws.
+// A write. Returns the server's answer, or null if the rules rejected it (taken, out of time…). No network, or no
+// answer in 8 s (a stalled mobile connection), throws.
 async function send(method, path, body) {
-  const res = await fetch(url(path), { method, body: JSON.stringify(body) });
+  const res = await fetch(url(path), { method, body: JSON.stringify(body), signal: AbortSignal.timeout(8000) });
   if (res.status === 401) return null;
   if (!res.ok) throw new Error(`${method} ${path}: ${res.status}`);
   return res.json();
@@ -88,8 +89,8 @@ export async function create(lang) {
   throw new Error('no room');
 }
 
-// Takes the second seat. false if someone already took it.
-export const join = async code => (await send('PUT', `rooms/${code}/joined`, TS)) !== null;
+// Takes the second seat. Returns the server's `joined` time, or null if someone already took it.
+export const join = code => send('PUT', `rooms/${code}/joined`, TS);
 
 // Server time minus local time, from the timestamp that writing t/<me> answers with (spec §4.4).
 export async function clockOffset(code, me) {
