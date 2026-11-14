@@ -1,7 +1,7 @@
 # Wordini — Duelo 1 contra 1 — Diseño
 
 **Fecha:** 2026-11-13
-**Estado:** en revisión.
+**Estado:** aprobada el 2026-11-13. Ajustada con lo que mostraron el emulador de Firebase y un prototipo probado de punta a punta (§4.2, §4.4, §4.5).
 **Se apoya en:** `2026-11-09-wordini-grilla-design.md`. La cancha, el trazado, el diccionario y los puntos son los mismos.
 
 ## 1. Objetivo
@@ -20,6 +20,7 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
 - **Cancha:** de 5×5, sin casillas doradas. Sale del código de la sala, así que es la misma para los dos (§5).
 - **Idioma:** el de quien crea la sala. El que entra juega en ese idioma.
 - **Duración:** una cuenta regresiva de 3 s y después **5 minutos exactos**. El reloj no se pausa.
+- **Las letras** están tapadas hasta que termina la cuenta regresiva: el que espera al rival no puede ir buscando palabras.
 - **Palabras:** valen las mismas que en los niveles (`isValid`) y suman los mismos puntos (`points`). Mínimo 3 letras.
 - **Bloqueo:** cada palabra la puede marcar **una sola persona**: la primera que la escribe en el servidor (§4.3).
   - Si intentás una que ya marcó el rival: "🔒 CASA · la marcó tu rival", con el sonido de error. No resta.
@@ -35,11 +36,12 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
    - se barren salas viejas (§4.5) y se crea una sala nueva;
    - se abre un diálogo con el link `…/?vs=K7QX2`, el botón **Compartir** (`navigator.share`, con el portapapeles como plan B, igual que `share()` hoy) y el texto "Esperando rival…".
 2. **Entrar.** El amigo abre el link:
-   - se cargan las palabras del idioma de la sala;
+   - se cargan las palabras del idioma de la sala, aunque su celu esté en otro idioma. Al volver a los niveles recupera el suyo;
+   - no se abre la ayuda de la primera visita, porque taparía la cuenta regresiva;
    - si la sala ya tiene dos jugadores: "Esta partida ya empezó";
    - si no existe: "Ese desafío no existe o ya venció".
 3. **3‑2‑1.** Apenas entra el segundo, los dos ven la cuenta regresiva en grande y la grilla todavía no responde.
-4. **Partida.** El HUD del duelo reemplaza al de los niveles: `⏳ 4:12   VOS 23 · RIVAL 18 (7)`. Debajo de la grilla se ven tus palabras.
+4. **Partida.** El HUD del duelo reemplaza al de los niveles: `⏳ 4:12   TÚ 23   RIVAL 18 (7)` (los textos en español usan tú, como el resto del juego). Debajo de la grilla se ven tus palabras. No hay botón para abandonar: son 5 minutos, y para irse alcanza con salir de la página.
 5. **Fin.** A los 5:00 la grilla deja de responder y se abre el diálogo de resultado:
    - "🏆 ¡Ganaste 48 a 31!" / "Perdiste 31 a 48" / "Empate 40 a 40";
    - tus palabras y las del rival;
@@ -49,7 +51,8 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
    - si no, se crea una sala nueva y se escribe su código en `next` de la vieja. Si en ese instante el rival escribió `next` primero, gana la de él: entrás a la suya y la tuya queda vacía (se barre al día siguiente);
    - el otro, que sigue escuchando la sala vieja, ve "Tu rival quiere revancha → Jugar".
 7. **Volver a los niveles:** se cierra la conexión, se saca `?vs=` de la URL (`history.replaceState`) y se vuelve al nivel guardado.
-8. **Volver a la sala.** Si se cierra la pestaña o el sistema la mata al ir a WhatsApp, abrir el mismo link te devuelve a tu lugar: `localStorage["wordini:duel:K7QX2"] = "a"`. El tiempo sigue corriendo mientras no estás.
+8. **Volver a la sala.** Si se cierra la pestaña o el sistema la mata al ir a WhatsApp, abrir el mismo link te devuelve a tu lugar: `localStorage["wordini:duel"] = { code: "K7QX2", me: "a" }`. Se guarda solo el último duelo, así no se acumula nada. El tiempo sigue corriendo mientras no estás.
+9. **Esc** no cierra los diálogos del duelo: se sale con sus botones. El resultado vuelve a abrirse si se cierra igual, porque después del final no queda nada más por hacer.
 
 ## 4. Red: Firebase Realtime Database por REST
 
@@ -75,6 +78,7 @@ rooms/
       CASA:  "a"
       PERRO: "b"
     next:    "M3PZ8"               sala de la revancha
+sweep: <una hora de hace más de un día>   ticket para listar salas viejas (§4.5)
 ```
 
 Las reglas están en `database.rules.json`, en la raíz del repo, y se pegan en la consola:
@@ -84,23 +88,46 @@ Las reglas están en `database.rules.json`, en la raíz del repo, y se pegan en 
   "rules": {
     "rooms": {
       ".indexOn": "created",
-      ".read": "query.orderByChild === 'created' && query.endAt <= now - 86400000 && query.limitToFirst <= 20",
+      ".read": "query.orderByChild === 'created' && query.endAt === root.child('sweep').val() && query.limitToFirst <= 20",
       "$code": {
         ".read": true,
         ".write": "data.exists() && !newData.exists() && data.child('created').val() < now - 86400000",
-        "created": { ".write": "!data.exists()", ".validate": "newData.val() === now && $code.matches(/^[A-Z2-9]{5}$/)" },
-        "lang": { ".write": "!data.exists()", ".validate": "newData.parent().child('created').exists() && (newData.val() === 'es' || newData.val() === 'en' || newData.val() === 'fr')" },
-        "joined": { ".write": "!data.exists() && data.parent().child('created').exists()", ".validate": "newData.val() === now" },
-        "t": { "$p": { ".write": "data.parent().parent().child('created').exists() && ($p === 'a' || $p === 'b')", ".validate": "newData.val() === now" } },
+        "created": {
+          ".write": "!data.exists()",
+          ".validate": "newData.val() === now && $code.matches(/^[A-Z2-9]{5}$/)"
+        },
+        "lang": {
+          ".write": "!data.exists()",
+          ".validate": "newData.parent().child('created').exists() && (newData.val() === 'es' || newData.val() === 'en' || newData.val() === 'fr')"
+        },
+        "joined": {
+          ".write": "!data.exists() && data.parent().child('created').exists()",
+          ".validate": "newData.val() === now"
+        },
+        "t": {
+          "$p": {
+            ".write": "data.parent().parent().child('created').exists() && ($p === 'a' || $p === 'b')",
+            ".validate": "newData.val() === now"
+          }
+        },
         "words": {
           "$w": {
             ".write": "!data.exists()",
             ".validate": "$w.length >= 3 && $w.length <= 25 && (newData.val() === 'a' || newData.val() === 'b') && now >= data.parent().parent().child('joined').val() + 3000 && now <= data.parent().parent().child('joined').val() + 305000"
           }
         },
-        "next": { ".write": "!data.exists() && data.parent().child('created').exists()", ".validate": "newData.isString() && newData.val().matches(/^[A-Z2-9]{5}$/)" },
-        "$other": { ".validate": false }
+        "next": {
+          ".write": "!data.exists() && data.parent().child('created').exists()",
+          ".validate": "newData.isString() && newData.val().matches(/^[A-Z2-9]{5}$/)"
+        },
+        "$other": {
+          ".validate": false
+        }
       }
+    },
+    "sweep": {
+      ".write": true,
+      ".validate": "newData.isNumber() && newData.val() <= now - 86400000"
     }
   }
 }
@@ -110,7 +137,7 @@ Qué garantizan:
 - **La primera escritura gana.** `lang`, `created`, `joined`, `next` y cada palabra se escriben una sola vez. Un tercer jugador no logra escribir `joined`.
 - **Las horas las pone el servidor.** `=== now` obliga a mandar `{".sv": "timestamp"}`.
 - **No hay palabras fuera de hora.** Se rechazan antes del arranque y después de los 5 minutos, con 2 s de margen para la latencia.
-- **No se pueden listar las salas.** Solo las de más de un día, de a 20 como máximo, y solo para barrerlas (§4.5).
+- **No se pueden listar las salas.** Solo las creadas antes del ticket `sweep`, que siempre es de hace más de un día, de a 20 como máximo, y solo para barrerlas (§4.5).
 - **Toda sala tiene `created`.** Ningún otro campo se puede escribir sin él. Así no quedan salas sin hora de creación: Firebase las ordenaría primero y trabarían el barrido para siempre.
 - **No se puede borrar una sala entera**, salvo que tenga más de un día. Ningún campo se puede pisar ni borrar, salvo `t/a` y `t/b`.
 
@@ -128,7 +155,7 @@ Qué garantizan:
 - Cada celu calcula una sola vez, al entrar a la sala, la diferencia entre su reloj y el del servidor:
   1. hace `PUT t/<yo>` con `{".sv":"timestamp"}`;
   2. calcula `offset = horaServidor − (envío + recepción) / 2`.
-- **A verificar al implementar:** que la respuesta del `PUT` traiga la hora ya resuelta. Si no la trae, se hace un `GET` del mismo lugar justo después.
+- **Verificado en el emulador:** la respuesta del `PUT` trae la hora ya resuelta.
 - **Fases**, con `ahora = Date.now() + offset` y `start = joined + 3000`:
   - `waiting`: todavía no hay `joined`;
   - `countdown`: `ahora < start`;
@@ -139,12 +166,15 @@ Qué garantizan:
 ### 4.5 Limpieza de salas
 
 Antes de crear una sala, el celu barre salas viejas:
-1. `GET rooms.json?orderBy="created"&endAt=<ahora−1 día>&limitToFirst=20` trae hasta 20 salas viejas;
-2. un `PATCH rooms.json` con `{K1: null, K2: null, …}` las borra.
+1. `PUT sweep.json` con `antes = ahora − 1 día − 1 hora` (la hora de margen cubre un reloj adelantado). Las reglas solo aceptan un `sweep` de hace más de un día;
+2. `GET rooms.json?orderBy="created"&endAt=<antes>&limitToFirst=20` trae hasta 20 salas viejas;
+3. un `PATCH rooms.json` con `{K1: null, K2: null, …}` las borra.
 
+- **Por qué el ticket:** las reglas de Firebase solo comparan `query.endAt` con `==`. Con `<=` rechazan siempre, verificado en el emulador. Por eso la regla de lectura exige `query.endAt === root.child('sweep').val()`, y la regla de `sweep` garantiza que ese valor sea viejo.
+- Si dos celus barren al mismo tiempo, uno puede pisar el ticket del otro. Ese segundo `GET` se rechaza y ese barrido se saltea. No pasa nada.
 - Las reglas solo permiten exactamente esa lectura y ese borrado.
 - La limpieza va al ritmo del uso, así que la base queda acotada sin cron ni servidor.
-- **A verificar con el smoke test:** que las reglas evalúen el `PATCH` sala por sala. Si no, se borra cada sala con su propio `DELETE`.
+- **Verificado en el emulador:** el `PATCH` se evalúa sala por sala. Si alguna no se puede borrar, se rechaza todo el `PATCH`.
 - Si el barrido falla, no importa: la sala se crea igual.
 
 ### 4.6 Recortes a propósito
@@ -159,7 +189,7 @@ Van marcados con `ponytail:` en el código.
 | Archivo | Cambio |
 |---|---|
 | `js/board.js` | `createBoard(lang, level, words, seed = \`${lang}:${level}\`)`. Se exporta `BIG_FROM`. El duelo llama `{ ...createBoard(lang, BIG_FROM, words, \`duel:${code}\`), gold: [] }`. |
-| `js/duel.js` (nuevo) | **Sin DOM, se puede probar:** `newCode(rand)`, `applyEvent(room, type, {path, data})` (aplica `put` y `patch` sobre el objeto de la sala), `phase(room, now)`, `timeLeft(room, now)`, `scores(room, me)` (devuelve `{mine, theirs, nMine, nTheirs}`), `wordsOf(room, who)`. **Red:** `create(lang)` (barre y después crea, reintentando si el código ya existe), `join(code)`, `syncClock(code, me)` (devuelve el offset), `claim(code, word, me)`, `listen(code, onRoom)` (devuelve una función para cerrar el `EventSource`), `rematch(code, lang)`. |
+| `js/duel.js` (nuevo) | **Sin DOM, se puede probar:** `newCode(rand)`, `duelBoard(lang, code, words)`, `applyEvent(room, type, {path, data})` (aplica `put` y `patch` sobre el objeto de la sala), `phase(room, now)`, `timeLeft(room, now)`, `scores(room, me)` (devuelve `{mine, theirs, nMine, nTheirs}`), `wordsOf(room, who)`, `other(me)`. **Red:** `getRoom(code)`, `create(lang)` (barre y después crea, reintentando si el código ya existe), `join(code)`, `clockOffset(code, me)`, `claim(code, word, me)`, `listen(code, onRoom)` (devuelve una función para cerrar el `EventSource`), `rematch(code, lang, next)`, y `setDB(url)` solo para correr el smoke test contra el emulador. |
 | `js/main.js` | Estado `duel = { code, me, room, offset, pending }`, o `null` en los niveles. **Al entrar a un duelo:** `stopClock()` del nivel, se arma la cancha del duelo y se reutiliza `renderBoard()`. **Durante el duelo:** `submit()` va por §4.3; `render()` muestra `#duel-hud` y oculta el HUD de los niveles, las pistas y el selector de idioma; el trazado y el teclado no responden fuera de `playing`; `renderClock()` también maneja el 3‑2‑1, el tiempo que queda y el pase a `over`. **Al arrancar:** se lee `?vs=`. |
 | `index.html`, `style.css` | El botón ⚔️ en el header, `#duel-hud`, `#dlg-duel` (link, Compartir, "Esperando rival…" y los errores), `#dlg-duel-end` (resultado, palabras de los dos y botones), y el estilo grande del 3‑2‑1 en `#word`. |
 | `js/i18n.js` | Textos nuevos en es/en/fr: desafiar, esperando, sin sala, partida empezada, sin conexión, bloqueada, vos, rival, ganaste/perdiste/empate, revancha, el rival quiere revancha, jugar, volver, tus palabras, sus palabras. |
@@ -196,7 +226,7 @@ Van marcados con `ponytail:` en el código.
   - `newCode`: largo 5 y solo caracteres del alfabeto.
 
   En `test/board.test.js`: con el mismo código sale la misma cancha, de 5×5 y sin doradas, y con códigos distintos salen canchas distintas.
-- **Contra la base real** (`node tools/duel-smoke.mjs`, después de publicar las reglas):
+- **Contra la base** (`node tools/duel-smoke.mjs`, después de publicar las reglas; con la dirección del emulador como argumento corre contra el emulador):
   1. crear una sala;
   2. entrar como `b`;
   3. un tercer `joined` se rechaza;
@@ -204,7 +234,7 @@ Van marcados con `ponytail:` en el código.
   5. después de 3 s, `CASA` como `a` pasa y `CASA` como `b` se rechaza;
   6. no se pueden listar las salas nuevas;
   7. no se puede borrar una sala nueva;
-  8. verificar las dos dudas marcadas en §4.4 y §4.5.
+  8. que la respuesta del `PUT` traiga la hora del servidor.
 - **Punta a punta:** dos pestañas de Chromium headless contra la base real. Verifica que A crea la sala y B entra, el 3‑2‑1, que una palabra de A le aparece a B como 🔒, que los puntajes se ven en vivo y, pasados los 5 minutos reales, el resultado en las dos pestañas.
 - **Prueba final:** dos celus, uno con datos y otro con wifi, mandando el link por WhatsApp.
 
