@@ -57,6 +57,8 @@ await check('no se pueden listar las salas en juego', async () => {
   assert.equal(await status('PUT', 'sweep', before), 200);
   assert.equal(await status('GET', 'rooms', undefined, `?orderBy="created"&endAt=${before}&limitToFirst=20`), 200);
   assert.equal(await status('GET', 'rooms', undefined, `?orderBy="created"&endAt=${before}&limitToFirst=21`), 401);
+  assert.equal(await status('DELETE', 'sweep'), 401); // without the ticket, a query without endAt would match null
+  assert.equal(await status('GET', 'rooms', undefined, '?orderBy="created"&limitToFirst=20'), 401);
 });
 await check('revancha: el primero arma la sala y el otro entra a esa', async () => {
   const first = await rematch(code, 'es');

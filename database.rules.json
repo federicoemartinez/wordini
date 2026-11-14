@@ -2,7 +2,7 @@
   "rules": {
     "rooms": {
       ".indexOn": "created",
-      ".read": "query.orderByChild === 'created' && query.endAt === root.child('sweep').val() && query.limitToFirst <= 20",
+      ".read": "root.child('sweep').isNumber() && query.orderByChild === 'created' && query.endAt === root.child('sweep').val() && query.limitToFirst <= 20",
       "$code": {
         ".read": true,
         ".write": "data.exists() && !newData.exists() && data.child('created').val() < now - 86400000",
@@ -40,7 +40,7 @@
       }
     },
     "sweep": {
-      ".write": true,
+      ".write": "newData.exists()",
       ".validate": "newData.isNumber() && newData.val() <= now - 86400000"
     }
   }
