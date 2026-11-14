@@ -5,6 +5,7 @@ const BIG_FROM = 11; // from this level on the grid is 5×5
 const MIN_COMMON = { 4: 25, 5: 50 }; // minimum common words per board
 const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
 const GOLD_FROM = 4;
+export const TURN_FROM = 20; // from this level on the board turns/mirrors once at half the target (game.js turn)
 const MAX_TRIES = 500;
 const POINTS = [0, 0, 0, 1, 2, 4, 7, 11]; // by length; 8 or more = 16
 
@@ -58,6 +59,22 @@ export function neighbors(size) {
     }
     return out;
   });
+}
+
+// Symmetry t (0-7) of the square: mirror left-right if t >= 4, then t % 4 quarter turns clockwise. Returns where
+// each tile goes. Neighbors stay neighbors, so the same words can be traced; they're only somewhere else.
+export const turnCell = (size, t) => i => {
+  let r = Math.floor(i / size);
+  let c = t >= 4 ? size - 1 - (i % size) : i % size;
+  for (let q = 0; q < t % 4; q++) [r, c] = [c, size - 1 - r];
+  return r * size + c;
+};
+
+export function turnBoard(board, t) {
+  const to = turnCell(board.size, t);
+  const letters = [];
+  board.letters.forEach((c, i) => (letters[to(i)] = c));
+  return { ...board, letters, gold: board.gold.map(g => ({ ...g, cell: to(g.cell) })) };
 }
 
 // `common` as a Set plus letter weights, computed once per list.
