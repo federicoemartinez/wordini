@@ -125,3 +125,8 @@ test('rendimiento: createBoard 5×5 tarda menos de 50 ms en promedio', () => {
     assert.ok(avg < 50, `${l}: ${avg.toFixed(1)} ms promedio`);
   }
 });
+
+test('la semilla por defecto es idioma:nivel; con otra semilla sale otra cancha', () => {
+  assert.deepEqual(createBoard('es', 7, words.es, 'es:7').letters, createBoard('es', 7, words.es).letters);
+  assert.notDeepEqual(createBoard('es', 7, words.es, 'duel:K7QX2').letters, createBoard('es', 7, words.es).letters);
+});

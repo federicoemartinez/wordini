@@ -1,7 +1,7 @@
 // Deterministic boards: the same (language, level) gives the same board in any browser. Spec §4.
 
 // Difficulty knobs (spec §4.6). Calibrate with `node tools/levels.mjs <lang>`.
-const BIG_FROM = 11; // from this level on the grid is 5×5
+export const BIG_FROM = 11; // from this level on the grid is 5×5
 const MIN_COMMON = { 4: 25, 5: 50 }; // minimum common words per board
 const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
 const GOLD_FROM = 4;
@@ -136,8 +136,8 @@ function pickGold(rand, level, through) {
   return gold;
 }
 
-export function createBoard(lang, level, words) {
-  const rand = mulberry32(fnv1a(`${lang}:${level}`));
+export function createBoard(lang, level, words, seed = `${lang}:${level}`) {
+  const rand = mulberry32(fnv1a(seed));
   const d = prepare(words);
   const size = level < BIG_FROM ? 4 : 5;
   for (let tries = 0; tries < MAX_TRIES; tries++) {
