@@ -84,12 +84,12 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 #board.veiled .tile { color: transparent; text-shadow: none; }
 
 /* Word in progress and result on release */
-#word { min-height: 1.6em; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; }
+#word { min-height: 2.4rem; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; }
 #word.live { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
 #word.good { color: var(--green); text-shadow: 0 0 12px var(--green); animation: pulse .4s; }
 #word.dup { color: var(--gold); text-shadow: 0 0 10px var(--gold); font-size: 1.1rem; }
 #word.invalid, #word.short { color: var(--magenta); text-shadow: 0 0 10px var(--magenta); font-size: 1.1rem; animation: shake .3s; }
-#word.count { font-size: 3rem; color: var(--gold); text-shadow: 0 0 16px var(--gold); }
+#word.count { font-size: 3rem; line-height: 2.4rem; color: var(--gold); text-shadow: 0 0 16px var(--gold); } /* as tall as the others: the board doesn't jump */
 @keyframes pulse { 50% { transform: scale(1.15); } }
 @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 
@@ -180,13 +180,13 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 #btn-hint.nudge { animation: nudge .7s infinite alternate; }
 @keyframes nudge { to { transform: scale(1.15); box-shadow: 0 0 14px var(--gold), 0 0 30px var(--gold); } }
 
-#btn-next, #btn-share {
+#btn-next, #btn-share, #btn-back-duel {
   color: var(--green);
   border-color: var(--green);
   box-shadow: 0 0 6px var(--green), 0 0 20px var(--green);
   text-shadow: 0 0 8px var(--green);
 }
-#btn-next { padding: .7rem 2rem; font-size: 1.1rem; }
+#btn-next, #btn-back-duel { padding: .7rem 2rem; font-size: 1.1rem; }
 
 #found-box { width: 100%; font-size: .8rem; }
 #found-box summary { cursor: pointer; color: var(--cyan); }
@@ -224,6 +224,9 @@ dialog form { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 
 #duel-result { color: var(--gold); text-shadow: 0 0 10px var(--gold); }
 #duel-score { font-family: inherit; font-size: 1.6rem; text-align: center; }
 #duel-ask { color: var(--green); text-shadow: 0 0 8px var(--green); }
+#duel-waiting { font-family: inherit; color: var(--gold); text-shadow: 0 0 8px var(--gold); animation: breathe 1.2s infinite alternate; }
+#duel-since { color: var(--muted); text-shadow: none; font-variant-numeric: tabular-nums; }
+@keyframes breathe { to { opacity: .4; } }
 dialog h3 { margin: .8rem 0 .2rem; font-size: .8rem; color: var(--cyan); }
 dialog .words { margin: 0; font-size: .8rem; color: var(--muted); letter-spacing: .05em; }
 

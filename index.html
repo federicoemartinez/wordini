@@ -40,6 +40,7 @@
   </header>
 
   <main>
+    <button id="btn-back-duel" data-t="backToDuel" hidden></button>
     <div id="hud">
       <div id="lvl"><span id="level"></span><span id="time"></span></div>
       <div id="bar"><div id="fill"></div><span id="score"></span></div>
@@ -99,6 +100,7 @@
   <dialog id="dlg-duel">
     <h2 data-t="duelTitle"></h2>
     <p id="duel-msg"></p>
+    <p id="duel-waiting" hidden><span data-t="duelWaiting"></span> <span id="duel-since"></span></p>
     <div id="duel-invite" class="row">
       <input id="duel-link" readonly>
       <button id="btn-duel-share" data-t="share"></button>

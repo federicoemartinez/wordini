@@ -1,7 +1,7 @@
 # Wordini — Duelo 1 contra 1 — Diseño
 
 **Fecha:** 2026-11-13
-**Estado:** aprobada el 2026-11-13. Ajustada con lo que mostraron el emulador de Firebase y un prototipo probado de punta a punta (§4.2, §4.4, §4.5). Ampliada el mismo día, a pedido del usuario, con la semilla que no se repite y el giro a los 2:30 (§2).
+**Estado:** aprobada el 2026-11-13. Ajustada con lo que mostraron el emulador de Firebase y un prototipo probado de punta a punta (§4.2, §4.4, §4.5). Ampliada el mismo día, a pedido del usuario, con la semilla que no se repite y el giro a los 2:30 (§2). Ajustada el 2026-11-14 después de que el usuario la probó: palabras al instante (§4.3), stream que se suelta con la pestaña oculta (§4.6b), sala de espera visible y botón para volver a la partida (§3).
 **Se apoya en:** `2026-11-09-wordini-grilla-design.md`. La cancha, el trazado, el diccionario y los puntos son los mismos.
 
 ## 1. Objetivo
@@ -35,7 +35,8 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
 
 1. **Desafiar.** En el header aparece el botón ⚔️, al lado de `?` y 🔊. Al tocarlo:
    - se barren salas viejas (§4.5) y se crea una sala nueva;
-   - se abre un diálogo con el link `…/?vs=K7QX2`, el botón **Compartir** (`navigator.share`, con el portapapeles como plan B, igual que `share()` hoy) y el texto "Esperando rival…".
+   - se abre un diálogo con el link `…/?vs=K7QX2`, el botón **Compartir** (`navigator.share`, con el portapapeles como plan B, igual que `share()` hoy) y, en su propia línea, **"⏳ Esperando a tu rival"** latiendo, con el tiempo que lleva esperando;
+   - cuando entra el rival suena `fx.gold` y arranca el 3‑2‑1.
 2. **Entrar.** El amigo abre el link:
    - se cargan las palabras del idioma de la sala, aunque su celu esté en otro idioma. Al volver a los niveles recupera el suyo;
    - no se abre la ayuda de la primera visita, porque taparía la cuenta regresiva;
@@ -52,7 +53,7 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
    - si no, se crea una sala nueva y se escribe su código en `next` de la vieja. Si en ese instante el rival escribió `next` primero, gana la de él: entrás a la suya y la tuya queda vacía (se barre al día siguiente);
    - el otro, que sigue escuchando la sala vieja, ve "Tu rival quiere revancha → Jugar".
 7. **Volver a los niveles:** se cierra la conexión, se saca `?vs=` de la URL (`history.replaceState`) y se vuelve al nivel guardado.
-8. **Volver a la sala.** Si se cierra la pestaña o el sistema la mata al ir a WhatsApp, abrir el mismo link te devuelve a tu lugar: `localStorage["wordini:duel"] = { code: "K7QX2", me: "a" }`. Se guarda solo el último duelo, así no se acumula nada. El tiempo sigue corriendo mientras no estás.
+8. **Volver a la sala.** Si se sale por error (Volver, cerrar la pestaña, el sistema que mata la app al ir a WhatsApp), en los niveles aparece arriba **"⚔️ Volver a la partida"** mientras ese duelo esté esperando o en juego; también abrir el mismo link te devuelve a tu lugar: `localStorage["wordini:duel"] = { code: "K7QX2", me: "a" }`. Se guarda solo el último duelo, así no se acumula nada. El tiempo sigue corriendo mientras no estás.
 9. **Esc** no cierra los diálogos del duelo: se sale con sus botones. El resultado vuelve a abrirse si se cierra igual, porque después del final no queda nada más por hacer.
 
 ## 4. Red: Firebase Realtime Database por REST
@@ -144,12 +145,14 @@ Qué garantizan:
 
 ### 4.3 Marcar una palabra
 
+**Suma al instante** (pedido del usuario: "mejor que el juego ande rápido", aunque haya una carrera; antes se esperaba al servidor y tardaba 440–790 ms por palabra, ahora 7–17 ms):
+
 1. **Primero se valida en el celu**, como en los niveles: `short` o `invalid` no van a la red.
-2. **Después se mira la sala que ya llegó por `EventSource`:** si `words[w]` es tuya, es repetida; si es del rival, sale 🔒. Lo mismo si la palabra todavía está "en vuelo" desde tu celu (un conjunto `pending`).
-3. **Si nadie la marcó todavía:** `PUT rooms/K/words/<w>.json` con el cuerpo `"a"` o `"b"` (la palabra va con `encodeURIComponent` por la Ñ).
-   - **200:** es tuya. Se festeja con `fx.good` y "+N", igual que en los niveles.
-   - **Rechazo de las reglas:** si `words[w]` es tuya es repetida, si no, 🔒. Si el rechazo fue por la hora (justo en el final), se trata igual: no suma.
-   - **Error de red:** "📶 sin conexión" y no suma. No se reintenta.
+2. **Después se mira la sala que ya llegó por `EventSource`:** si `words[w]` es tuya, es repetida; si es del rival, sale 🔒.
+3. **Si nadie la marcó todavía, suma ya:** se anota en la sala local, se festeja con `fx.good` y "+N", y por detrás va `PUT rooms/K/words/<w>.json` con el cuerpo `"a"` o `"b"` (la palabra va con `encodeURIComponent` por la Ñ).
+   - **200:** listo.
+   - **Rechazo de las reglas** (el rival la marcó un instante antes, dentro de lo que tarda el stream, o llegó fuera de hora): se descuenta y sale 🔒.
+   - **Error de red o sin respuesta en 8 s:** se descuenta y sale "📶 sin conexión". No se reintenta.
 
 ### 4.4 Reloj
 
@@ -177,6 +180,10 @@ Antes de crear una sala, el celu barre salas viejas:
 - La limpieza va al ritmo del uso, así que la base queda acotada sin cron ni servidor.
 - **Verificado en el emulador:** el `PATCH` se evalúa sala por sala. Si alguna no se puede borrar, se rechaza todo el `PATCH`.
 - Si el barrido falla, no importa: la sala se crea igual.
+
+### 4.6b Una conexión por pestaña visible
+
+Firebase usa HTTP/1.1 y el navegador permite 6 conexiones por servidor, sumando todas las pestañas. Cada `EventSource` ocupa una para siempre: con 6 pestañas de duelos viejos abiertas, la siguiente no recibía nada y sus pedidos quedaban en cola (lo vio el usuario: "RIVAL 0 (0)" en una ventana mientras la otra veía bien; reproducido en Chromium). Por eso el stream se cierra cuando la pestaña queda oculta y se vuelve a abrir al mostrarse; Firebase manda la sala entera al reconectar.
 
 ### 4.6 Recortes a propósito
 

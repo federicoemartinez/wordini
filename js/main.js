@@ -26,7 +26,7 @@ let since = null; // performance.now() since the clock started running; null = s
 let loadSeq = 0; // only the latest requested load may touch the screen
 let idleFrom = 0; // elapsed() at the last word found: after a minute without words the hint button nudges
 const meanings = new Map(); // `${lang}:${word}` -> meaning of a hint word; null while loading or if there's none
-let duel = null; // the 1-vs-1 in play: { code, me, room, offset, theirs, pending, live, turned, ended, stop }; null in the levels
+let duel = null; // the 1-vs-1 in play: { code, me, room, offset, theirs, waited, live, turned, ended, stop }; null in the levels
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -80,6 +80,7 @@ function enterLevel(saved) {
   renderBoard();
   render();
   say('');
+  offerDuel();
 }
 
 // The clock runs from when the board is shown until it's cleared, and only while the tab is visible.
@@ -399,10 +400,10 @@ async function enterDuel(code) {
   ++loadSeq; // a level still loading must not take the screen
   if (game) stopClock(); // the level's stopwatch waits for the duel
   board = game = undefined;
-  const d = (duel = { code, me: seatIn(code), room: null, offset: 0, theirs: 0, pending: new Set() });
+  const d = (duel = { code, me: seatIn(code), room: null, offset: 0, theirs: 0 });
   history.replaceState(null, '', `?vs=${code}`);
   $('#board').replaceChildren();
-  $('#hud').hidden = $('#hint-row').hidden = $('#btn-next').hidden = $('#found-box').hidden = $('#btn-duel').hidden = true;
+  $('#hud').hidden = $('#hint-row').hidden = $('#btn-next').hidden = $('#found-box').hidden = $('#btn-duel').hidden = $('#btn-back-duel').hidden = true;
   $('#lang').disabled = true;
   say(t(lang, 'loading'));
   try {
@@ -428,7 +429,7 @@ async function enterDuel(code) {
     say('');
     d.room = room;
     d.theirs = scores(room, d.me).theirs;
-    d.stop = listen(code, r => onDuelRoom(d, r));
+    follow(d);
     renderDuel();
   } catch {
     if (d === duel) duelMessage('duelOffline');
@@ -463,7 +464,12 @@ function renderDuelClock() {
   const now = serverNow();
   const ph = phase(room, now);
   $('#board').classList.toggle('veiled', ph === 'waiting' || ph === 'countdown');
-  if (ph === 'waiting') return duelWaiting();
+  if (ph === 'waiting') {
+    duel.waited = true;
+    return duelWaiting(now);
+  }
+  if (duel.waited) fx.gold(); // the rival just came in
+  duel.waited = false;
   $('#dlg-duel').close();
   $('#duel-time').textContent = `⏳ ${formatTime(timeLeft(room, now))}`;
   if (ph === 'countdown') say(String(Math.ceil((room.joined + COUNTDOWN - now) / 1000)), 'count');
@@ -488,11 +494,12 @@ function turnDuel() {
   fx.turn($('#board'), sym);
 }
 
-function duelWaiting() {
+function duelWaiting(now) {
+  $('#duel-since').textContent = formatTime(now - duel.room.created);
   if ($('#dlg-duel').open) return;
   $('#duel-msg').textContent = t(lang, 'duelWait');
   $('#duel-link').value = duelLink(duel.code);
-  $('#duel-invite').hidden = false;
+  $('#duel-invite').hidden = $('#duel-waiting').hidden = false;
   $('#dlg-duel').showModal();
 }
 
@@ -503,11 +510,12 @@ function duelMessage(key) {
   $('#duel-hud').hidden = $('#found-box').hidden = true;
   say('');
   $('#duel-msg').textContent = t(lang, key);
-  $('#duel-invite').hidden = true;
+  $('#duel-invite').hidden = $('#duel-waiting').hidden = true;
   if (!$('#dlg-duel').open) $('#dlg-duel').showModal();
 }
 
-// A word in the duel: checked here first, then the server decides who got it (spec duelo §4.3).
+// A word in the duel counts at once; the server hears about it behind. If the rival marked it a moment earlier
+// (both within the time the stream takes), the server says no and it's taken back (spec duelo §4.3).
 async function duelSubmit(p) {
   const d = duel;
   const word = wordOf(board, p);
@@ -515,25 +523,23 @@ async function duelSubmit(p) {
   typed = '';
   renderPath();
   if (word.length < 3) return say(p.length > 1 ? t(lang, 'short') : '', 'short');
-  const owner = d.room.words?.[word] ?? (d.pending.has(word) ? d.me : null);
+  const owner = d.room.words?.[word];
   if (!isValid(words, word)) return duelNo(word, 'invalid');
   if (owner) return duelNo(word, owner === d.me ? 'dup' : 'blocked');
-  d.pending.add(word);
-  say(word, 'live');
+  (d.room.words ??= {})[word] = d.me;
+  say(word, 'good');
+  pop(`+${points(word)}`, $('#duel-me'));
+  fx.good(word.length);
+  renderDuel();
   let got;
   try {
     got = await claim(d.code, word, d.me);
   } catch {
     got = null; // no connection
   }
-  d.pending.delete(word);
-  if (d !== duel) return;
-  if (got === null) return duelNo(word, 'duelOffline');
-  if (!got) return duelNo(word, d.room.words?.[word] === d.me ? 'dup' : 'blocked');
-  (d.room.words ??= {})[word] = d.me; // EventSource confirms it right after; this is just sooner
-  say(word, 'good');
-  pop(`+${points(word)}`, $('#duel-me'));
-  fx.good(word.length);
+  if (got || d !== duel) return;
+  if (d.room.words?.[word] === d.me) delete d.room.words[word]; // the stream may already have brought the rival's
+  duelNo(word, got === null ? 'duelOffline' : 'blocked');
   renderDuel();
 }
 
@@ -588,6 +594,24 @@ async function onRematch() {
   } finally {
     $('#btn-rematch').disabled = false;
   }
+}
+
+// Streams the room. A hidden tab lets go of it: browsers allow 6 connections per server across all tabs, and
+// a few forgotten duel tabs would leave a new one with no stream. Coming back, Firebase sends the whole room.
+function follow(d) {
+  d.stop?.();
+  d.stop = listen(d.code, r => onDuelRoom(d, r));
+}
+
+// From the levels: a way back to a duel of this phone that's still waiting or being played.
+async function offerDuel() {
+  const seat = get(storage, 'wordini:duel');
+  $('#btn-back-duel').hidden = true;
+  if (!seat) return;
+  const room = await getRoom(seat.code).catch(() => null);
+  if (duel || !room?.created || phase(room, Date.now()) === 'over') return;
+  $('#btn-back-duel').hidden = false;
+  $('#btn-back-duel').onclick = () => enterDuel(seat.code);
 }
 
 function leaveDuel() {
@@ -647,6 +671,7 @@ $('#btn-mute').onclick = () => {
 document.addEventListener('keydown', onKey);
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, fx.unlock);
 document.addEventListener('visibilitychange', () => {
+  if (duel?.stop) document.hidden ? duel.stop() : follow(duel);
   if (!game) return;
   if (document.hidden) stopClock();
   else startClock();
