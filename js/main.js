@@ -43,19 +43,24 @@ async function start(newLang) {
   $('#lang').value = lang;
   renderTexts();
   say(t(lang, 'loading'));
-  let loaded;
-  try {
-    const res = await fetch(`words/${lang}.json`);
-    if (!res.ok) throw new Error(res.status);
-    loaded = await res.json();
-    if (!Array.isArray(loaded?.valid) || !Array.isArray(loaded?.common)) throw new Error('old format'); // e.g. the criptex one, cached
-  } catch {
-    if (seq === loadSeq) say(t(lang, 'loadError'));
-    return;
-  }
-  if (seq !== loadSeq) return; // the player switched language while loading
+  const loaded = await fetchWords(lang);
+  if (seq !== loadSeq) return; // the player switched language (or went into a duel) while loading
+  if (!loaded) return say(t(lang, 'loadError'));
   words = loaded;
   enterLevel(loadGame(storage, lang));
+}
+
+// The word list of `l`, or null if it couldn't be downloaded.
+async function fetchWords(l) {
+  try {
+    const res = await fetch(`words/${l}.json`);
+    if (!res.ok) throw new Error(res.status);
+    const loaded = await res.json();
+    if (!Array.isArray(loaded?.valid) || !Array.isArray(loaded?.common)) throw new Error('old format'); // e.g. the criptex one, cached
+    return loaded;
+  } catch {
+    return null;
+  }
 }
 
 function enterLevel(saved) {
@@ -78,7 +83,7 @@ function enterLevel(saved) {
 const elapsed = () => game.ms + (since === null ? 0 : performance.now() - since);
 
 function startClock() {
-  if (since === null && !game.passed && !document.hidden) since = performance.now();
+  if (game && since === null && !game.passed && !document.hidden) since = performance.now(); // no game: in a duel
 }
 
 // Folds the elapsed time into game.ms (what gets saved) without stopping the clock.
@@ -148,15 +153,7 @@ function render() {
     tile.classList.toggle('done', game.goldLeft[k] === 0);
     tile.querySelector('.badge').textContent = game.goldLeft[k] || '✓';
   });
-  const lengths = [...new Set(game.found.map(w => w.length))].sort((a, b) => b - a);
-  $('#found-title').textContent = `${t(lang, 'found')} (${game.found.length})`;
-  $('#found').replaceChildren(
-    ...lengths.map(n => {
-      const p = document.createElement('p');
-      p.append(Object.assign(document.createElement('b'), { textContent: n }), game.found.filter(w => w.length === n).sort().join(' '));
-      return p;
-    }),
-  );
+  renderFound(game.found);
   const h = game.hint;
   const lit = h ? h.path.slice(0, h.shown) : [];
   board.letters.forEach((_, i) => $('#board').children[i].classList.toggle('hint', lit.includes(i)));
@@ -173,6 +170,19 @@ function render() {
   $('#btn-hint').disabled = h ? h.shown >= h.path.length - 2 : !missed.length;
   $('#btn-next').hidden = !game.passed;
   renderClock();
+}
+
+// Found words under the grid, longest first.
+function renderFound(found) {
+  const lengths = [...new Set(found.map(w => w.length))].sort((a, b) => b - a);
+  $('#found-title').textContent = `${t(lang, 'found')} (${found.length})`;
+  $('#found').replaceChildren(
+    ...lengths.map(n => {
+      const p = document.createElement('p');
+      p.append(Object.assign(document.createElement('b'), { textContent: n }), found.filter(w => w.length === n).sort().join(' '));
+      return p;
+    }),
+  );
 }
 
 // Meaning of a hint word: asks Wiktionary the first time and renders again if it answers.
@@ -197,9 +207,9 @@ function renderPath() {
   if (path.length || typed) say(typed || wordOf(board, path), 'live');
 }
 
-function pop(text) {
+function pop(text, where = $('#bar')) {
   const el = Object.assign(document.createElement('span'), { className: 'pop', textContent: text });
-  $('#bar').append(el);
+  where.append(el);
   setTimeout(() => el.remove(), 900);
 }
 
@@ -332,9 +342,10 @@ function nextLevel() {
   enterLevel({ level: game.level + 1 });
 }
 
-async function share() {
-  const url = `${location.origin}${location.pathname}?l=${lang}`;
-  const text = shareText(lang, game.level, score(game.found), game.ms, game.hints, url);
+const gameUrl = () => `${location.origin}${location.pathname}?l=${lang}`;
+
+// Native share sheet; without one, to the clipboard, and `btn` says so.
+async function share(text, btn) {
   if (navigator.share) {
     try {
       await navigator.share({ text });
@@ -345,8 +356,8 @@ async function share() {
   }
   try {
     await navigator.clipboard.writeText(text);
-    $('#btn-share').textContent = t(lang, 'copied');
-    setTimeout(() => ($('#btn-share').textContent = t(lang, 'share')), 1500);
+    btn.textContent = t(lang, 'copied');
+    setTimeout(() => (btn.textContent = t(lang, 'share')), 1500);
   } catch {
     prompt('', text); // no clipboard: let them copy it by hand
   }
@@ -377,7 +388,7 @@ $('#btn-hint').onclick = () => {
   fx.tick(game.hint.shown);
   render();
 };
-$('#btn-share').onclick = share;
+$('#btn-share').onclick = e => share(shareText(lang, game.level, score(game.found), game.ms, game.hints, gameUrl()), e.target);
 $('#btn-mute').onclick = () => {
   fx.setMuted(!fx.muted);
   set(storage, 'wordini:muted', fx.muted);
