@@ -68,13 +68,13 @@ function enterLevel(saved) {
   path = [];
   typed = '';
   since = null;
-  if (game.ms > 0) startClock(); // was already playing this level: resume
+  startClock(); // from the moment the board is visible: otherwise you could study it for free
   renderBoard();
   render();
   say('');
 }
 
-// The clock runs from the level's first letter until it's cleared, and only while the tab is visible.
+// The clock runs from when the board is shown until it's cleared, and only while the tab is visible.
 const elapsed = () => game.ms + (since === null ? 0 : performance.now() - since);
 
 function startClock() {
@@ -388,7 +388,7 @@ for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, fx.un
 document.addEventListener('visibilitychange', () => {
   if (!game) return;
   if (document.hidden) stopClock();
-  else if (game.ms > 0) startClock();
+  else startClock();
 });
 addEventListener('pagehide', () => game && stopClock()); // fallback: some browsers don't fire visibilitychange on close
 setInterval(renderClock, 250);
