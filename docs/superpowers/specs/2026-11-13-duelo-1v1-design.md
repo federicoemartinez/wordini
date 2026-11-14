@@ -1,7 +1,7 @@
 # Wordini — Duelo 1 contra 1 — Diseño
 
 **Fecha:** 2026-11-13
-**Estado:** aprobada el 2026-11-13. Ajustada con lo que mostraron el emulador de Firebase y un prototipo probado de punta a punta (§4.2, §4.4, §4.5).
+**Estado:** aprobada el 2026-11-13. Ajustada con lo que mostraron el emulador de Firebase y un prototipo probado de punta a punta (§4.2, §4.4, §4.5). Ampliada el mismo día, a pedido del usuario, con la semilla que no se repite y el giro a los 2:30 (§2).
 **Se apoya en:** `2026-11-09-wordini-grilla-design.md`. La cancha, el trazado, el diccionario y los puntos son los mismos.
 
 ## 1. Objetivo
@@ -17,7 +17,8 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
 ## 2. Reglas del duelo
 
 - **Rival:** un amigo que entra por link. No hay "buscar rival" con desconocidos.
-- **Cancha:** de 5×5, sin casillas doradas. Sale del código de la sala, así que es la misma para los dos (§5).
+- **Cancha:** de 5×5, sin casillas doradas. Sale del código de la sala y de su hora de creación en el servidor (`duel:K7QX2:1794615810327`), así que es la misma para los dos y no se repite aunque un código se vuelva a usar después de barrer su sala vieja (§5).
+- **Giro a los 2:30:** a mitad de partida la cancha gira o se espeja una vez, como desde el nivel 20 (`turnBoard` y `fx.turn`): misma animación, mismo sonido y el cartel "¡El tablero giró!". El giro sale de la sala (`1 + created % 7`), así que es el mismo para los dos y llega al mismo tiempo (hora del servidor). Si había un trazo en curso, se cancela, porque sus casillas cambiaron de lugar. Si el celu abre la sala después de la mitad, la cancha aparece ya girada, sin animación ni cartel.
 - **Idioma:** el de quien crea la sala. El que entra juega en ese idioma.
 - **Duración:** una cuenta regresiva de 3 s y después **5 minutos exactos**. El reloj no se pausa.
 - **Las letras** están tapadas hasta que termina la cuenta regresiva: el que espera al rival no puede ir buscando palabras.
@@ -26,7 +27,7 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
   - Si intentás una que ya marcó el rival: "🔒 CASA · la marcó tu rival", con el sonido de error. No resta.
   - Si intentás una que ya marcaste vos: el aviso de siempre, "ya la encontraste".
 - **Qué ves del rival durante la partida:** su puntaje y cuántas palabras lleva, en vivo, pero **no cuáles son**. Cuando marca una, su puntaje late y aparece "+N".
-- **No hay:** pistas, umbral, niveles ni rotación de cancha.
+- **No hay:** pistas, umbral ni niveles.
 - **Resultado:** ganaste, perdiste o empate, según los puntos. Recién ahí se ven las palabras de los dos.
 - **Progreso de los niveles:** el duelo no lo toca. El cronómetro del nivel queda pausado mientras dura el duelo.
 
@@ -188,8 +189,8 @@ Van marcados con `ponytail:` en el código.
 
 | Archivo | Cambio |
 |---|---|
-| `js/board.js` | `createBoard(lang, level, words, seed = \`${lang}:${level}\`)`. Se exporta `BIG_FROM`. El duelo llama `{ ...createBoard(lang, BIG_FROM, words, \`duel:${code}\`), gold: [] }`. |
-| `js/duel.js` (nuevo) | **Sin DOM, se puede probar:** `newCode(rand)`, `duelBoard(lang, code, words)`, `applyEvent(room, type, {path, data})` (aplica `put` y `patch` sobre el objeto de la sala), `phase(room, now)`, `timeLeft(room, now)`, `scores(room, me)` (devuelve `{mine, theirs, nMine, nTheirs}`), `wordsOf(room, who)`, `other(me)`. **Red:** `getRoom(code)`, `create(lang)` (barre y después crea, reintentando si el código ya existe), `join(code)`, `clockOffset(code, me)`, `claim(code, word, me)`, `listen(code, onRoom)` (devuelve una función para cerrar el `EventSource`), `rematch(code, lang, next)`, y `setDB(url)` solo para correr el smoke test contra el emulador. |
+| `js/board.js` | `createBoard(lang, level, words, seed = \`${lang}:${level}\`)`. Se exporta `BIG_FROM`. El duelo llama `{ ...createBoard(room.lang, BIG_FROM, words, \`duel:${code}:${room.created}\`), gold: [] }` y, a los 2:30, `turnBoard(board, turnOf(room))`. |
+| `js/duel.js` (nuevo) | **Sin DOM, se puede probar:** `newCode(rand)`, `duelBoard(code, room, words)`, `applyEvent(room, type, {path, data})` (aplica `put` y `patch` sobre el objeto de la sala), `phase(room, now)`, `timeLeft(room, now)`, `halfway(room)` (hora del giro), `turnOf(room)` (simetría 1-7), `scores(room, me)` (devuelve `{mine, theirs, nMine, nTheirs}`), `wordsOf(room, who)`, `other(me)`. **Red:** `getRoom(code)`, `create(lang)` (barre y después crea, reintentando si el código ya existe), `join(code)` (devuelve la hora de `joined` o `null`), `clockOffset(code, me)`, `claim(code, word, me)`, `listen(code, onRoom)` (devuelve una función para cerrar el `EventSource`), `rematch(code, lang, next)`, y `setDB(url)` solo para correr el smoke test contra el emulador. |
 | `js/main.js` | Estado `duel = { code, me, room, offset, pending }`, o `null` en los niveles. **Al entrar a un duelo:** `stopClock()` del nivel, se arma la cancha del duelo y se reutiliza `renderBoard()`. **Durante el duelo:** `submit()` va por §4.3; `render()` muestra `#duel-hud` y oculta el HUD de los niveles, las pistas y el selector de idioma; el trazado y el teclado no responden fuera de `playing`; `renderClock()` también maneja el 3‑2‑1, el tiempo que queda y el pase a `over`. **Al arrancar:** se lee `?vs=`. |
 | `index.html`, `style.css` | El botón ⚔️ en el header, `#duel-hud`, `#dlg-duel` (link, Compartir, "Esperando rival…" y los errores), `#dlg-duel-end` (resultado, palabras de los dos y botones), y el estilo grande del 3‑2‑1 en `#word`. |
 | `js/i18n.js` | Textos nuevos en es/en/fr: desafiar, esperando, sin sala, partida empezada, sin conexión, bloqueada, vos, rival, ganaste/perdiste/empate, revancha, el rival quiere revancha, jugar, volver, tus palabras, sus palabras. |
@@ -199,10 +200,10 @@ Van marcados con `ponytail:` en el código.
 | `README.md` | Cómo se crea la base y se publican las reglas (§8). |
 | `sw.js` | Sin cambios: ya deja pasar los pedidos a otros dominios. |
 
-**Convivencia con las ramas abiertas:**
-- `feat/cancha-gira`: la rotación se dispara desde el nivel 20 en `main.js`. El duelo no la llama.
-- `fix/reloj-desde-el-tablero`: el reloj del nivel arranca cuando se muestra el tablero. Al salir del duelo se vuelve con `enterLevel`, que ya resuelve eso.
-- Los conflictos que haya en `main.js` se resuelven al mergear.
+**Convivencia con lo que entró a `master` mientras tanto** (mergeado en `feat/duelo`):
+- La cancha que gira desde el nivel 20: el duelo reutiliza `turnBoard` y `fx.turn` para su giro a los 2:30, pero no `game.js turn`, que es por puntos y al azar.
+- El reloj del nivel arranca cuando se muestra el tablero. Al salir del duelo se vuelve con `enterLevel`, que ya resuelve eso.
+- ESLint y CI: la rama pasa `npm run lint` y `npm test`.
 
 ## 6. Errores
 

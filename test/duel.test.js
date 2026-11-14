@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createBoard } from '../js/board.js';
-import { applyEvent, COUNTDOWN, duelBoard, LENGTH, newCode, other, phase, scores, timeLeft, wordsOf } from '../js/duel.js';
+import { applyEvent, COUNTDOWN, duelBoard, halfway, LENGTH, newCode, other, phase, scores, timeLeft, turnOf, wordsOf } from '../js/duel.js';
 
 const es = JSON.parse(readFileSync(new URL('../words/es.json', import.meta.url), 'utf8'));
 
@@ -13,12 +13,26 @@ test('newCode: 5 caracteres fáciles de dictar', () => {
 });
 
 test('duelBoard: misma sala, misma cancha de 5×5 sin doradas; otra sala, otra cancha', () => {
-  const a = duelBoard('es', 'K7QX2', es);
-  assert.deepEqual(duelBoard('es', 'K7QX2', es).letters, a.letters);
+  const room = { lang: 'es', created: 1794615810327 };
+  const a = duelBoard('K7QX2', room, es);
+  assert.deepEqual(duelBoard('K7QX2', room, es).letters, a.letters);
   assert.equal(a.size, 5);
   assert.deepEqual(a.gold, []);
-  assert.notDeepEqual(duelBoard('es', 'M3PZ8', es).letters, a.letters);
+  assert.notDeepEqual(duelBoard('M3PZ8', room, es).letters, a.letters);
   assert.notDeepEqual(createBoard('es', 11, es).letters, a.letters); // no es la del nivel 11
+});
+
+test('duelBoard: un código que se vuelve a usar en otra sala no repite la cancha', () => {
+  const a = duelBoard('K7QX2', { lang: 'es', created: 1794615810327 }, es);
+  assert.notDeepEqual(duelBoard('K7QX2', { lang: 'es', created: 1794615810328 }, es).letters, a.letters);
+});
+
+test('halfway y turnOf: el giro es a los 2:30 y el mismo para los dos', () => {
+  const room = { created: 500, joined: 1000 };
+  assert.equal(halfway(room), 1000 + COUNTDOWN + LENGTH / 2);
+  for (let created = 0; created < 50; created++) assert.ok([1, 2, 3, 4, 5, 6, 7].includes(turnOf({ created })));
+  assert.equal(turnOf(room), turnOf({ ...room }));
+  assert.notEqual(turnOf({ created: 1 }), turnOf({ created: 2 }));
 });
 
 test('applyEvent: put en la raíz reemplaza la sala; null es que no existe', () => {

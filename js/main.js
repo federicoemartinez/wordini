@@ -1,6 +1,6 @@
 import { createBoard, isValid, pathFor, points, turnBoard } from './board.js';
 import { define } from './define.js';
-import { claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, join, listen, other, phase, rematch, scores, timeLeft, wordsOf } from './duel.js';
+import { claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, wordsOf } from './duel.js';
 import { hint, newProgress, play, score, step, turn, wordOf } from './game.js';
 import { duelText, formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
@@ -26,7 +26,7 @@ let since = null; // performance.now() since the clock started running; null = s
 let loadSeq = 0; // only the latest requested load may touch the screen
 let idleFrom = 0; // elapsed() at the last word found: after a minute without words the hint button nudges
 const meanings = new Map(); // `${lang}:${word}` -> meaning of a hint word; null while loading or if there's none
-let duel = null; // the 1-vs-1 in play: { code, me, room, offset, theirs, pending, ended, stop }; null in the levels
+let duel = null; // the 1-vs-1 in play: { code, me, room, offset, theirs, pending, live, turned, ended, stop }; null in the levels
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -423,7 +423,7 @@ async function enterDuel(code) {
     words = loaded;
     document.documentElement.lang = $('#lang').value = lang;
     renderTexts();
-    board = duelBoard(lang, code, words);
+    board = duelBoard(code, room, words);
     renderBoard();
     say('');
     d.room = room;
@@ -468,7 +468,24 @@ function renderDuelClock() {
   $('#duel-time').textContent = `⏳ ${formatTime(timeLeft(room, now))}`;
   if (ph === 'countdown') say(String(Math.ceil((room.joined + COUNTDOWN - now) / 1000)), 'count');
   else if ($('#word').className === 'count') say('');
+  if (now < halfway(room)) duel.live = true; // this phone saw the board before the turn: it gets the show
+  else if (!duel.turned) turnDuel();
   if (ph === 'over') endDuel();
+}
+
+// Halfway through, the board turns or mirrors for both at once. A path in progress is dropped: its tiles moved.
+function turnDuel() {
+  const sym = turnOf(duel.room);
+  duel.turned = true;
+  board = turnBoard(board, sym);
+  tracing = false;
+  path = [];
+  typed = '';
+  renderBoard();
+  renderPath();
+  if (!duel.live) return; // opened after the turn: it's just drawn turned
+  say(t(lang, 'turned'), 'good');
+  fx.turn($('#board'), sym);
 }
 
 function duelWaiting() {

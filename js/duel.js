@@ -13,8 +13,9 @@ const TS = { '.sv': 'timestamp' }; // the server writes its own time
 
 export const newCode = (rand = Math.random) => Array.from({ length: 5 }, () => ALPHABET[Math.floor(rand() * ALPHABET.length)]).join('');
 
-// Same board for both players: comes from the room code. 5×5 and no gold tiles.
-export const duelBoard = (lang, code, words) => ({ ...createBoard(lang, BIG_FROM, words, `duel:${code}`), gold: [] });
+// Same board for both players: comes from the room. Codes come back once old rooms are swept, so the server's
+// creation time goes into the seed too: no two rooms share a board. 5×5 and no gold tiles.
+export const duelBoard = (code, room, words) => ({ ...createBoard(room.lang, BIG_FROM, words, `duel:${code}:${room.created}`), gold: [] });
 
 export const other = me => (me === 'a' ? 'b' : 'a');
 export const wordsOf = (room, who) => Object.keys(room?.words ?? {}).filter(w => room.words[w] === who).sort();
@@ -32,6 +33,11 @@ export function phase(room, now) {
 }
 
 export const timeLeft = (room, now) => Math.max(0, Math.min(LENGTH, room.joined + COUNTDOWN + LENGTH - now));
+
+// At 2:30 the board turns or mirrors once, like from level 20. The symmetry (board.js turnCell) comes from the
+// room, so both players get the same one at the same time.
+export const halfway = room => room.joined + COUNTDOWN + LENGTH / 2;
+export const turnOf = room => 1 + (room.created % 7);
 
 // Applies one EventSource event to the room and returns it: 'put' replaces what's at `path`, 'patch' replaces
 // each child it names. null deletes. A put at "/" replaces the whole room (null = the room doesn't exist).
