@@ -35,6 +35,19 @@ The knobs live at the top of `js/board.js`. To see how the levels come out:
 node tools/levels.mjs es 1 50   # language, from, to
 ```
 
+## 1 vs 1 duels
+
+A duel is a room in a Firebase Realtime Database (free Spark plan, no card), used through its REST API and `EventSource`: no SDK and no key. The database URL in `js/duel.js` is public on purpose; `database.rules.json` is what protects the data (first write wins, the server keeps the time, old rooms get swept by the next challenge).
+
+Set it up once: Firebase console → Build → Realtime Database → Create database (us-central1, locked mode) → Rules tab: paste `database.rules.json` → Publish. Every change to that file has to be published the same way.
+
+Check the rules and `js/duel.js` against the real database (or against the emulator, passing its URL):
+
+```bash
+node tools/duel-smoke.mjs
+node tools/duel-smoke.mjs http://demo-wordini-default-rtdb.localhost:9000   # firebase emulators:start --only database --project demo-wordini
+```
+
 ## Deploy
 
 The site is published with GitHub Pages from the root of `master`, so every push to `master` redeploys it. Any other static host works too (e.g. Cloudflare Pages): publish the repo root as is. Both serve `words/*.json` compressed (~1 MB for Spanish).

@@ -1,0 +1,47 @@
+{
+  "rules": {
+    "rooms": {
+      ".indexOn": "created",
+      ".read": "query.orderByChild === 'created' && query.endAt === root.child('sweep').val() && query.limitToFirst <= 20",
+      "$code": {
+        ".read": true,
+        ".write": "data.exists() && !newData.exists() && data.child('created').val() < now - 86400000",
+        "created": {
+          ".write": "!data.exists()",
+          ".validate": "newData.val() === now && $code.matches(/^[A-Z2-9]{5}$/)"
+        },
+        "lang": {
+          ".write": "!data.exists()",
+          ".validate": "newData.parent().child('created').exists() && (newData.val() === 'es' || newData.val() === 'en' || newData.val() === 'fr')"
+        },
+        "joined": {
+          ".write": "!data.exists() && data.parent().child('created').exists()",
+          ".validate": "newData.val() === now"
+        },
+        "t": {
+          "$p": {
+            ".write": "data.parent().parent().child('created').exists() && ($p === 'a' || $p === 'b')",
+            ".validate": "newData.val() === now"
+          }
+        },
+        "words": {
+          "$w": {
+            ".write": "!data.exists()",
+            ".validate": "$w.length >= 3 && $w.length <= 25 && (newData.val() === 'a' || newData.val() === 'b') && now >= data.parent().parent().child('joined').val() + 3000 && now <= data.parent().parent().child('joined').val() + 305000"
+          }
+        },
+        "next": {
+          ".write": "!data.exists() && data.parent().child('created').exists()",
+          ".validate": "newData.isString() && newData.val().matches(/^[A-Z2-9]{5}$/)"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "sweep": {
+      ".write": true,
+      ".validate": "newData.isNumber() && newData.val() <= now - 86400000"
+    }
+  }
+}
