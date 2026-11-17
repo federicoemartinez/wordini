@@ -130,6 +130,8 @@ function renderBoard() {
     }),
     trail,
   );
+  // A span, so the board turning (fx.turn animates the tile) doesn't undo the flip, and the hint arrow isn't flipped
+  for (const f of board.flipped) el.children[f.cell].replaceChildren(Object.assign(document.createElement('span'), { className: f.flip, textContent: board.letters[f.cell] }));
   for (const g of board.gold) {
     el.children[g.cell].classList.add('gold');
     el.children[g.cell].append(Object.assign(document.createElement('b'), { className: 'badge' }));

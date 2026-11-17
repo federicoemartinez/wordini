@@ -8,6 +8,8 @@ const words = Object.fromEntries(
   LANGS.map(l => [l, JSON.parse(readFileSync(new URL(`../words/${l}.json`, import.meta.url), 'utf8'))]),
 );
 const tiny = { alphabet: 'ACMORS', valid: ['AMOR', 'CASA', 'CASAS', 'MAS', 'ROMA', 'SAC'], common: ['AMOR', 'CASA', 'ROMA'] };
+// Letras que dibujadas así quedan iguales o parecen otra (M/W, P/d, U/n, J/f, V/Λ, J/L, Z/S): nunca se dan vuelta de esa forma.
+const LOOKALIKE = { upside: 'HINOSXZMWVPUJ', mirror: 'AHIMOTUVWXYJLZ' };
 const adjacent = (a, b, size) => a !== b && Math.abs((a % size) - (b % size)) <= 1 && Math.abs(Math.floor(a / size) - Math.floor(b / size)) <= 1;
 
 // Otra implementación, sin poda ni bisección: ¿se puede armar `word` en la grilla?
@@ -57,7 +59,7 @@ test('mismo idioma y nivel dan la misma cancha; otro nivel da otra', () => {
   assert.notDeepEqual(createBoard('es', 8, words.es).letters, a.letters);
 });
 
-test('niveles 1-200: tamaño, mínimos, umbral, doradas y ?', () => {
+test('niveles 1-200: tamaño, mínimos, umbral, doradas, ? y letras al revés', () => {
   for (const l of LANGS) {
     for (let level = 1; level <= 200; level++) {
       const b = createBoard(l, level, words[l]);
@@ -76,6 +78,13 @@ test('niveles 1-200: tamaño, mínimos, umbral, doradas y ?', () => {
       assert.equal(new Set(b.gold.map(g => g.cell)).size, b.gold.length, `${id}: doradas repetidas`);
       assert.equal(b.hidden.length, level < 35 ? 0 : level < 50 ? 1 : 2, id);
       assert.equal(new Set(b.hidden).size, b.hidden.length, `${id}: ? repetidos`);
+      assert.equal(b.flipped.length, level < 30 ? 0 : level < 40 ? 4 : 5, id);
+      assert.equal(new Set(b.flipped.map(f => f.cell)).size, b.flipped.length, `${id}: al revés repetidas`);
+      for (const f of b.flipped) {
+        assert.ok(f.flip in LOOKALIKE, `${id}: ${f.flip}`);
+        assert.ok(!LOOKALIKE[f.flip].includes(b.letters[f.cell]), `${id}: ${b.letters[f.cell]} ${f.flip} es ambigua`);
+        assert.ok(!b.hidden.includes(f.cell) && !b.gold.some(g => g.cell === f.cell), `${id}: al revés sobre otra especial`);
+      }
       if (b.gold.length || b.hidden.length) {
         const { through } = solve(b.letters, words[l]);
         for (const g of b.gold) {
@@ -158,6 +167,7 @@ test('turnBoard: las 7 simetrías mueven todo y dejan las mismas palabras', () =
       b.letters.forEach((x, i) => assert.equal(c.letters[to(i)], x));
       assert.deepEqual(c.gold, b.gold.map(g => ({ ...g, cell: to(g.cell) })));
       assert.deepEqual(c.hidden, b.hidden.map(to));
+      assert.deepEqual(c.flipped, b.flipped.map(f => ({ ...f, cell: to(f.cell) })));
       assert.deepEqual([...solve(c.letters, words[l]).found].sort(), before, `${l} ${t}`);
       assert.deepEqual(c.missed([]), b.missed([]));
     }

@@ -120,6 +120,10 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 .tile.mystery { border-color: var(--violet); color: var(--violet); box-shadow: 0 0 8px var(--violet), 0 0 18px var(--violet); text-shadow: 0 0 8px var(--violet); animation: flicker 3s infinite; }
 .tile.mystery.on { border-color: var(--magenta); }
 @keyframes flicker { 0%, 90%, 94%, 100% { opacity: 1; } 92% { opacity: .5; } 96% { opacity: .75; } }
+/* Letters drawn backwards (board.js pickFlipped) */
+.upside, .mirror { display: inline-block; }
+.upside { transform: rotate(180deg); }
+.mirror { transform: scaleX(-1); }
 /* Hint tiles: a blinking outline, so it doesn't fight the border/shadow of .on and .gold */
 .tile.hint { outline: 2px solid var(--green); outline-offset: 2px; animation: blink .8s infinite alternate; }
 @keyframes blink { to { outline-color: transparent; } }

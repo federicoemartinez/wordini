@@ -6,6 +6,7 @@ const MIN_COMMON = { 4: 25, 5: 50 }; // minimum common words per board
 const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
 const GOLD_FROM = 4;
 export const TURN_FROM = 20; // from this level on the board turns/mirrors once at half the target (game.js turn)
+const FLIP_FROM = 30; // from this level on some letters are drawn upside down or mirrored (main.js renderBoard)
 const HIDE_FROM = 35; // from this level on some tiles always show "?" (shown)
 const MAX_TRIES = 500;
 const POINTS = [0, 0, 0, 1, 2, 4, 7, 11]; // by length; 8 or more = 16
@@ -13,6 +14,10 @@ const POINTS = [0, 0, 0, 1, 2, 4, 7, 11]; // by length; 8 or more = 16
 const pct = level => (level < BIG_FROM ? 0.2 + 0.025 * (level - 1) : Math.min(0.45, 0.25 + 0.01 * (level - BIG_FROM)));
 const maxGold = level => (level < GOLD_FROM ? 0 : level <= 10 ? 1 : level <= 20 ? 2 : 3);
 const maxHidden = level => (level < HIDE_FROM ? 0 : level < 50 ? 1 : 2);
+const maxFlipped = level => (level < FLIP_FROM ? 0 : level < 40 ? 4 : 5);
+// Letters that drawn each way would look the same, or like another one (M/W, P/d, U/n, J/f, V/Λ, J/L, Z/S).
+const LOOKALIKE = { upside: 'HINOSXZMWVPUJ', mirror: 'AHIMOTUVWXYJLZ' };
+const flipsOf = c => Object.keys(LOOKALIKE).filter(f => !LOOKALIKE[f].includes(c));
 
 export const points = word => POINTS[word.length] ?? 16;
 
@@ -76,7 +81,8 @@ export function turnBoard(board, t) {
   const to = turnCell(board.size, t);
   const letters = [];
   board.letters.forEach((c, i) => (letters[to(i)] = c));
-  return { ...board, letters, gold: board.gold.map(g => ({ ...g, cell: to(g.cell) })), hidden: board.hidden.map(to) };
+  const gold = board.gold.map(g => ({ ...g, cell: to(g.cell) }));
+  return { ...board, letters, gold, hidden: board.hidden.map(to), flipped: board.flipped.map(f => ({ ...f, cell: to(f.cell) })) };
 }
 
 // Letters as the player sees them: "?" on the hidden tiles. The real letter is still the one that counts.
@@ -168,6 +174,19 @@ function pickHidden(rand, level, through, taken) {
   return hidden;
 }
 
+// Letters drawn backwards: tiles not already special, each one flipped a way that doesn't make it ambiguous.
+function pickFlipped(rand, level, letters, taken) {
+  const flipped = [];
+  for (let k = 0; k < maxFlipped(level); k++) {
+    const options = letters.map((_, c) => c).filter(c => flipsOf(letters[c]).length && !taken.includes(c) && !flipped.some(f => f.cell === c));
+    if (!options.length) break;
+    const cell = options[Math.floor(rand() * options.length)];
+    const ways = flipsOf(letters[cell]);
+    flipped.push({ cell, flip: ways[Math.floor(rand() * ways.length)] });
+  }
+  return flipped;
+}
+
 export function createBoard(lang, level, words) {
   const rand = mulberry32(fnv1a(`${lang}:${level}`));
   const d = prepare(words);
@@ -178,12 +197,15 @@ export function createBoard(lang, level, words) {
     const common = [...found].filter(w => d.common.has(w)).sort();
     if (common.length < MIN_COMMON[size] || !common.some(w => w.length >= LONG[size])) continue;
     const commonPoints = common.reduce((n, w) => n + points(w), 0);
+    // Each special tile is picked after the previous ones and only from its level on: earlier boards stay the same
     const gold = pickGold(rand, level, through);
+    const hidden = pickHidden(rand, level, through, gold.map(g => g.cell));
     return {
       size,
       letters,
       gold,
-      hidden: pickHidden(rand, level, through, gold.map(g => g.cell)), // after the gold: earlier levels stay the same
+      hidden,
+      flipped: pickFlipped(rand, level, letters, [...gold.map(g => g.cell), ...hidden]),
       threshold: Math.ceil(pct(level) * commonPoints),
       commonCount: common.length,
       missed: found => common.filter(w => !found.includes(w)),
