@@ -1,4 +1,4 @@
-import { createBoard, pathFor, points, turnBoard } from './board.js';
+import { createBoard, pathFor, points, shown, turnBoard } from './board.js';
 import { define } from './define.js';
 import { hint, newProgress, play, score, step, turn, wordOf } from './game.js';
 import { formatTime, levelResult, shareText } from './share.js';
@@ -72,7 +72,9 @@ function enterLevel(saved) {
   startClock(); // from the moment the board is visible: otherwise you could study it for free
   renderBoard();
   render();
-  say('');
+  const firstMystery = board.hidden.length && !get(storage, 'wordini:mystery-seen'); // explained once; then it's in the help
+  if (firstMystery) set(storage, 'wordini:mystery-seen', true);
+  say(firstMystery ? t(lang, 'mystery') : '', 'note');
 }
 
 // The clock runs from when the board is shown until it's cleared, and only while the tab is visible.
@@ -121,13 +123,15 @@ function renderBoard() {
   const el = $('#board');
   el.style.setProperty('--n', board.size);
   el.replaceChildren(
-    ...board.letters.map((c, i) => {
-      const tile = Object.assign(document.createElement('div'), { className: 'tile', textContent: c });
+    ...shown(board).map((c, i) => {
+      const tile = Object.assign(document.createElement('div'), { className: c === '?' ? 'tile mystery' : 'tile', textContent: c });
       tile.dataset.i = i;
       return tile;
     }),
     trail,
   );
+  // A span, so the board turning (fx.turn animates the tile) doesn't undo the flip, and the hint arrow isn't flipped
+  for (const f of board.flipped) el.children[f.cell].replaceChildren(Object.assign(document.createElement('span'), { className: f.flip, textContent: board.letters[f.cell] }));
   for (const g of board.gold) {
     el.children[g.cell].classList.add('gold');
     el.children[g.cell].append(Object.assign(document.createElement('b'), { className: 'badge' }));
@@ -169,7 +173,7 @@ function render() {
     arrow.style.setProperty('--a', `${deg}deg`);
     $('#board').children[c].append(arrow);
   });
-  $('#hint').textContent = h ? h.path.map((c, i) => (i < h.shown ? board.letters[c] : '_')).join(' ') : '';
+  $('#hint').textContent = h ? h.path.map((c, i) => (i < h.shown ? shown(board)[c] : '_')).join(' ') : '';
   $('#meaning').textContent = (h && meaning(wordOf(board, h.path))) || '';
   $('#btn-hint').disabled = h ? h.shown >= h.path.length - 2 : !missed.length;
   $('#btn-next').hidden = !game.passed;
@@ -195,7 +199,7 @@ function renderPath() {
   tiles.forEach((tile, i) => tile.classList.toggle('on', path.includes(i)));
   const centers = path.map(i => `${tiles[i].offsetLeft + tiles[i].offsetWidth / 2},${tiles[i].offsetTop + tiles[i].offsetHeight / 2}`);
   line.setAttribute('points', centers.join(' '));
-  if (path.length || typed) say(typed || wordOf(board, path), 'live');
+  if (path.length || typed) say(typed || shownWord(path), 'live');
 }
 
 function pop(text) {
@@ -205,6 +209,7 @@ function pop(text) {
 }
 
 const pendingGold = () => board.gold.filter((_, k) => game.goldLeft[k] > 0).map(g => g.cell);
+const shownWord = p => p.map(i => shown(board)[i]).join(''); // with "?": what the player sees, not the real word
 
 function submit(p) {
   const word = wordOf(board, p);
@@ -218,7 +223,7 @@ function submit(p) {
     return;
   }
   if (result === 'invalid' || result === 'dup') {
-    say(`${word} · ${t(lang, result)}`, result);
+    say(`${shownWord(p)} · ${t(lang, result)}`, result); // with the "?": a miss doesn't give the letter away
     fx.bad();
     return;
   }
@@ -290,6 +295,7 @@ function onPointerUp(e) {
 const LIGATURES = { Œ: 'OE', Æ: 'AE' }; // same as the word lists (tools/build_words.py)
 
 const letterOf = key => {
+  if (key === '?') return key; // to type a word through a "?" tile
   if (key.length !== 1) return null;
   const up = key.toUpperCase();
   if (LIGATURES[up]) return LIGATURES[up];
@@ -302,7 +308,7 @@ function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Enter' && !typed) return; // with nothing typed, Enter belongs to the focused link or button
   if (e.key === 'Enter') {
-    const p = pathFor(typed, board.letters, pendingGold());
+    const p = pathFor(typed, shown(board), pendingGold());
     if (p) submit(p);
     else {
       say(`${typed} · ${t(lang, typed.length < 3 ? 'short' : 'invalid')}`, 'invalid');
@@ -319,7 +325,7 @@ function onKey(e) {
   } else return;
   e.preventDefault();
   if (e.key === 'Enter') return;
-  path = pathFor(typed, board.letters, pendingGold()) ?? [];
+  path = pathFor(typed, shown(board), pendingGold()) ?? [];
   renderPath();
   if (!typed) say('');
 }
