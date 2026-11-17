@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createBoard, isValid, neighbors, pathFor, points, solve, turnBoard, turnCell } from '../js/board.js';
+import { createBoard, isValid, neighbors, pathFor, points, shown, solve, turnBoard, turnCell } from '../js/board.js';
 
 const LANGS = ['es', 'en', 'fr'];
 const words = Object.fromEntries(
@@ -57,7 +57,7 @@ test('mismo idioma y nivel dan la misma cancha; otro nivel da otra', () => {
   assert.notDeepEqual(createBoard('es', 8, words.es).letters, a.letters);
 });
 
-test('niveles 1-200: tamaño, mínimos, umbral y doradas', () => {
+test('niveles 1-200: tamaño, mínimos, umbral, doradas y ?', () => {
   for (const l of LANGS) {
     for (let level = 1; level <= 200; level++) {
       const b = createBoard(l, level, words[l]);
@@ -74,11 +74,17 @@ test('niveles 1-200: tamaño, mínimos, umbral y doradas', () => {
       const maxGold = level < 4 ? 0 : level <= 10 ? 1 : level <= 20 ? 2 : 3;
       assert.ok(b.gold.length <= maxGold, id);
       assert.equal(new Set(b.gold.map(g => g.cell)).size, b.gold.length, `${id}: doradas repetidas`);
-      if (b.gold.length) {
+      assert.equal(b.hidden.length, level < 35 ? 0 : level < 50 ? 1 : 2, id);
+      assert.equal(new Set(b.hidden).size, b.hidden.length, `${id}: ? repetidos`);
+      if (b.gold.length || b.hidden.length) {
         const { through } = solve(b.letters, words[l]);
         for (const g of b.gold) {
           assert.ok(g.need >= 1 && g.need <= 3, id);
           assert.ok(through[g.cell].size >= 3 * g.need, `${id}: dorada ${g.cell} sin margen`);
+        }
+        for (const c of b.hidden) {
+          assert.ok(through[c].size >= 8, `${id}: ? en ${c} con pocas palabras`);
+          assert.ok(!b.gold.some(g => g.cell === c), `${id}: ? sobre una dorada`);
         }
       }
     }
@@ -117,6 +123,15 @@ test('pathFor prefiere el camino que pasa por las casillas pedidas', () => {
   assert.equal(pathFor('ASAS', letters), null); // hay una sola S
 });
 
+test('shown: las casillas ocultas se ven como ?; con teclado se escribe el ? literal', () => {
+  // C A
+  // ? A    detrás del ? hay una S
+  const b = { letters: [...'CASA'], hidden: [2] };
+  assert.deepEqual(shown(b), [...'CA?A']);
+  assert.deepEqual(pathFor('CA?A', shown(b)), [0, 1, 2, 3]);
+  assert.equal(pathFor('CASA', shown(b)), null); // tipear la S no encuentra la casilla: no se filtra la letra
+});
+
 test('turnCell: giro horario y espejo en 3×3', () => {
   // 0 1 2      giro: 6 3 0     espejo: 2 1 0
   // 3 4 5            7 4 1             5 4 3
@@ -134,7 +149,7 @@ test('turnCell: giro horario y espejo en 3×3', () => {
 
 test('turnBoard: las 7 simetrías mueven todo y dejan las mismas palabras', () => {
   for (const l of LANGS) {
-    const b = createBoard(l, 25, words[l]);
+    const b = createBoard(l, 55, words[l]);
     const before = [...solve(b.letters, words[l]).found].sort();
     for (let t = 1; t < 8; t++) {
       const to = turnCell(b.size, t);
@@ -142,6 +157,7 @@ test('turnBoard: las 7 simetrías mueven todo y dejan las mismas palabras', () =
       assert.equal(new Set(b.letters.map((_, i) => to(i))).size, b.letters.length, `${l} ${t}: no es una permutación`);
       b.letters.forEach((x, i) => assert.equal(c.letters[to(i)], x));
       assert.deepEqual(c.gold, b.gold.map(g => ({ ...g, cell: to(g.cell) })));
+      assert.deepEqual(c.hidden, b.hidden.map(to));
       assert.deepEqual([...solve(c.letters, words[l]).found].sort(), before, `${l} ${t}`);
       assert.deepEqual(c.missed([]), b.missed([]));
     }

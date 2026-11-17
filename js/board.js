@@ -6,11 +6,13 @@ const MIN_COMMON = { 4: 25, 5: 50 }; // minimum common words per board
 const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
 const GOLD_FROM = 4;
 export const TURN_FROM = 20; // from this level on the board turns/mirrors once at half the target (game.js turn)
+const HIDE_FROM = 35; // from this level on some tiles always show "?" (shown)
 const MAX_TRIES = 500;
 const POINTS = [0, 0, 0, 1, 2, 4, 7, 11]; // by length; 8 or more = 16
 
 const pct = level => (level < BIG_FROM ? 0.2 + 0.025 * (level - 1) : Math.min(0.45, 0.25 + 0.01 * (level - BIG_FROM)));
 const maxGold = level => (level < GOLD_FROM ? 0 : level <= 10 ? 1 : level <= 20 ? 2 : 3);
+const maxHidden = level => (level < HIDE_FROM ? 0 : level < 50 ? 1 : 2);
 
 export const points = word => POINTS[word.length] ?? 16;
 
@@ -74,8 +76,11 @@ export function turnBoard(board, t) {
   const to = turnCell(board.size, t);
   const letters = [];
   board.letters.forEach((c, i) => (letters[to(i)] = c));
-  return { ...board, letters, gold: board.gold.map(g => ({ ...g, cell: to(g.cell) })) };
+  return { ...board, letters, gold: board.gold.map(g => ({ ...g, cell: to(g.cell) })), hidden: board.hidden.map(to) };
 }
+
+// Letters as the player sees them: "?" on the hidden tiles. The real letter is still the one that counts.
+export const shown = board => board.letters.map((c, i) => (board.hidden.includes(i) ? '?' : c));
 
 // `common` as a Set plus letter weights, computed once per list.
 const prepared = new WeakMap();
@@ -153,6 +158,16 @@ function pickGold(rand, level, through) {
   return gold;
 }
 
+// Hidden tiles: at least 8 common words through them (that leaves out X, Q, Ñ...) and not already special (`taken`).
+function pickHidden(rand, level, through, taken) {
+  const hidden = [];
+  for (let k = 0; k < maxHidden(level); k++) {
+    const options = through.map((_, c) => c).filter(c => through[c].size >= 8 && !taken.includes(c) && !hidden.includes(c));
+    if (options.length) hidden.push(options[Math.floor(rand() * options.length)]);
+  }
+  return hidden;
+}
+
 export function createBoard(lang, level, words) {
   const rand = mulberry32(fnv1a(`${lang}:${level}`));
   const d = prepare(words);
@@ -163,10 +178,12 @@ export function createBoard(lang, level, words) {
     const common = [...found].filter(w => d.common.has(w)).sort();
     if (common.length < MIN_COMMON[size] || !common.some(w => w.length >= LONG[size])) continue;
     const commonPoints = common.reduce((n, w) => n + points(w), 0);
+    const gold = pickGold(rand, level, through);
     return {
       size,
       letters,
-      gold: pickGold(rand, level, through),
+      gold,
+      hidden: pickHidden(rand, level, through, gold.map(g => g.cell)), // after the gold: earlier levels stay the same
       threshold: Math.ceil(pct(level) * commonPoints),
       commonCount: common.length,
       missed: found => common.filter(w => !found.includes(w)),

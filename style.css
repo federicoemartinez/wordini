@@ -4,6 +4,7 @@
   --magenta: #ff2bd6;
   --green: #39ff88;
   --gold: #ffd23f;
+  --violet: #b26bff;
   --dim: #3a3a55;
   --muted: #9a9ac0;
   --text: #ecebff;
@@ -74,10 +75,11 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 @keyframes rise { to { transform: translateY(-2rem); opacity: 0; } }
 
 /* Word in progress and result on release */
-#word { min-height: 1.6em; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; }
+#word { min-height: 2.4rem; display: grid; place-items: center; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; }
 #word.live { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
 #word.good { color: var(--green); text-shadow: 0 0 12px var(--green); animation: pulse .4s; }
 #word.dup { color: var(--gold); text-shadow: 0 0 10px var(--gold); font-size: 1.1rem; }
+#word.note { color: var(--violet); text-shadow: 0 0 8px var(--violet); font-family: system-ui, sans-serif; font-size: .9rem; letter-spacing: 0; }
 #word.invalid, #word.short { color: var(--magenta); text-shadow: 0 0 10px var(--magenta); font-size: 1.1rem; animation: shake .3s; }
 @keyframes pulse { 50% { transform: scale(1.15); } }
 @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
@@ -114,6 +116,10 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 .tile.gold { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 8px var(--gold), 0 0 18px var(--gold); text-shadow: 0 0 8px var(--gold); }
 .tile.gold.done { border-color: var(--green); color: var(--green); box-shadow: 0 0 8px var(--green); text-shadow: 0 0 8px var(--green); }
 .tile.gold.on { border-color: var(--magenta); }
+/* "?" tiles: a neon sign with a loose wire */
+.tile.mystery { border-color: var(--violet); color: var(--violet); box-shadow: 0 0 8px var(--violet), 0 0 18px var(--violet); text-shadow: 0 0 8px var(--violet); animation: flicker 3s infinite; }
+.tile.mystery.on { border-color: var(--magenta); }
+@keyframes flicker { 0%, 90%, 94%, 100% { opacity: 1; } 92% { opacity: .5; } 96% { opacity: .75; } }
 /* Hint tiles: a blinking outline, so it doesn't fight the border/shadow of .on and .gold */
 .tile.hint { outline: 2px solid var(--green); outline-offset: 2px; animation: blink .8s infinite alternate; }
 @keyframes blink { to { outline-color: transparent; } }
