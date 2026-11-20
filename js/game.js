@@ -1,5 +1,5 @@
 // Game rules, no DOM: tracing, new words, gold tiles and threshold. Spec §2.
-import { isValid, pathFor, points, TURN_FROM, turnCell } from './board.js';
+import { closed, isValid, pathFor, points, TURN_FROM, turnCell } from './board.js';
 
 export const newProgress = board => ({ found: [], goldLeft: board.gold.map(g => g.need), passed: false, ms: 0, hints: 0 });
 export const score = found => found.reduce((n, w) => n + points(w), 0);
@@ -34,7 +34,7 @@ export function play(progress, board, words, path) {
 
 // Hint: each call lights one more tile of a missed common word. Each lit tile points to the next one, so it
 // stops 2 short of the end: the last letter is never shown. Picks a word through a pending gold tile if there
-// is one, then the one closest to 5 letters. Returns false if there's nothing to light.
+// is one, then the one closest to 5 letters, and never through a closed lock. Returns false if there's nothing to light.
 export function hint(progress, board) {
   const h = progress.hint;
   if (h) {
@@ -43,7 +43,8 @@ export function hint(progress, board) {
   } else {
     const pending = board.gold.filter((_, k) => progress.goldLeft[k] > 0).map(g => g.cell);
     const rank = p => (p.some(c => pending.includes(c)) ? 0 : 100) + Math.abs(p.length - 5);
-    const paths = board.missed(progress.found).map(w => pathFor(w, board.letters, pending));
+    const shut = closed(board, progress.found);
+    const paths = board.missed(progress.found).map(w => pathFor(w, board.letters, pending, shut)).filter(Boolean);
     if (!paths.length) return false;
     progress.hint = { path: paths.reduce((a, b) => (rank(b) < rank(a) ? b : a)), shown: 1 };
   }

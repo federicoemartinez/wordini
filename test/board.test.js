@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createBoard, isValid, neighbors, pathFor, points, shown, solve, turnBoard, turnCell } from '../js/board.js';
+import { closed, createBoard, isValid, neighbors, pathFor, points, shown, solve, turnBoard, turnCell } from '../js/board.js';
 
 const LANGS = ['es', 'en', 'fr'];
 const words = Object.fromEntries(
@@ -59,7 +59,8 @@ test('mismo idioma y nivel dan la misma cancha; otro nivel da otra', () => {
   assert.notDeepEqual(createBoard('es', 8, words.es).letters, a.letters);
 });
 
-test('niveles 1-200: tamaño, mínimos, umbral, doradas, ? y letras al revés', () => {
+test('niveles 1-200: tamaño, mínimos, umbral, doradas, ?, letras al revés y candados', () => {
+  let withLocks = 0;
   for (const l of LANGS) {
     for (let level = 1; level <= 200; level++) {
       const b = createBoard(l, level, words[l]);
@@ -85,6 +86,19 @@ test('niveles 1-200: tamaño, mínimos, umbral, doradas, ? y letras al revés', 
         assert.ok(!LOOKALIKE[f.flip].includes(b.letters[f.cell]), `${id}: ${b.letters[f.cell]} ${f.flip} es ambigua`);
         assert.ok(!b.hidden.includes(f.cell) && !b.gold.some(g => g.cell === f.cell), `${id}: al revés sobre otra especial`);
       }
+      assert.ok(b.locks.length <= (level < 15 ? 0 : level < 40 ? 1 : 2), id);
+      withLocks += b.locks.length > 0;
+      const others = [...b.gold.map(g => g.cell), ...b.hidden, ...b.flipped.map(f => f.cell)];
+      b.locks.forEach((k, n) => {
+        assert.ok(k.need >= 3 + 3 * n && k.need <= 5 + 3 * n, `${id}: candado ${n} pide ${k.need}`);
+        assert.ok(!others.includes(k.cell), `${id}: candado sobre otra especial`);
+      });
+      if (b.locks.length) {
+        const cells = b.locks.map(k => k.cell);
+        assert.equal(new Set(cells).size, cells.length, `${id}: candados repetidos`);
+        const free = common.filter(w => pathFor(w, b.letters, [], cells)).length; // armables con todo cerrado
+        assert.ok(free >= Math.max(...b.locks.map(k => k.need)), `${id}: no alcanzan las palabras para abrir`);
+      }
       if (b.gold.length || b.hidden.length) {
         const { through } = solve(b.letters, words[l]);
         for (const g of b.gold) {
@@ -98,6 +112,7 @@ test('niveles 1-200: tamaño, mínimos, umbral, doradas, ? y letras al revés', 
       }
     }
   }
+  assert.ok(withLocks > 100 && withLocks < 400, `${withLocks} canchas con candado`); // más o menos la mitad desde el 15
 });
 
 test('las comunes del solver coinciden con una búsqueda independiente', () => {
@@ -130,6 +145,20 @@ test('pathFor prefiere el camino que pasa por las casillas pedidas', () => {
   assert.ok(pathFor('ASA', letters, [4]).includes(4));
   assert.ok(pathFor('ASA', letters, [2]).includes(2));
   assert.equal(pathFor('ASAS', letters), null); // hay una sola S
+});
+
+test('pathFor esquiva las casillas pedidas (candados cerrados)', () => {
+  const letters = [...'ASAZAZZZZ']; // la misma de arriba
+  assert.ok(!pathFor('ASA', letters, [], [2]).includes(2)); // termina en la del centro
+  assert.equal(pathFor('ASA', letters, [], [1]), null); // la única S está cerrada
+});
+
+test('closed: los candados siguen cerrados hasta encontrar `need` palabras', () => {
+  const b = { locks: [{ cell: 7, need: 3 }, { cell: 2, need: 6 }] };
+  assert.deepEqual(closed(b, ['SOL', 'MAR']), [7, 2]);
+  assert.deepEqual(closed(b, ['SOL', 'MAR', 'LUZ']), [2]);
+  assert.deepEqual(closed(b, [...'ABCDEF']), []);
+  assert.deepEqual(closed({ locks: [] }, []), []);
 });
 
 test('shown: las casillas ocultas se ven como ?; con teclado se escribe el ? literal', () => {
@@ -168,6 +197,7 @@ test('turnBoard: las 7 simetrías mueven todo y dejan las mismas palabras', () =
       assert.deepEqual(c.gold, b.gold.map(g => ({ ...g, cell: to(g.cell) })));
       assert.deepEqual(c.hidden, b.hidden.map(to));
       assert.deepEqual(c.flipped, b.flipped.map(f => ({ ...f, cell: to(f.cell) })));
+      assert.deepEqual(c.locks, b.locks.map(k => ({ ...k, cell: to(k.cell) })));
       assert.deepEqual([...solve(c.letters, words[l]).found].sort(), before, `${l} ${t}`);
       assert.deepEqual(c.missed([]), b.missed([]));
     }

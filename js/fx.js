@@ -65,6 +65,12 @@ export function turn(board, t) {
   for (const tile of board.querySelectorAll('.tile')) tile.animate([{ transform: `rotate(${deg}deg) scaleX(${s})` }, { transform: done }], opts);
 }
 
+// A lock that just opened lights up in a burst.
+export function open(tile) {
+  if (calm) return;
+  tile.animate([{ transform: 'scale(1.35)', filter: 'brightness(2.5)' }, { transform: 'none', filter: 'none' }], { duration: 600, easing: 'ease-out' });
+}
+
 export function win() {
   [523, 659, 784, 1047].forEach((f, k) => beep(f, 0.25, 'triangle', 0.15 + k * 0.09, 0.08));
   if (calm) return;
