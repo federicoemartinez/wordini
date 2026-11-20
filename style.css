@@ -116,10 +116,9 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 .tile.gold { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 8px var(--gold), 0 0 18px var(--gold); text-shadow: 0 0 8px var(--gold); }
 .tile.gold.done { border-color: var(--green); color: var(--green); box-shadow: 0 0 8px var(--green); text-shadow: 0 0 8px var(--green); }
 .tile.gold.on { border-color: var(--magenta); }
-/* "?" tiles: a neon sign with a loose wire */
-.tile.mystery { border-color: var(--violet); color: var(--violet); box-shadow: 0 0 8px var(--violet), 0 0 18px var(--violet); text-shadow: 0 0 8px var(--violet); animation: flicker 3s infinite; }
+/* "?" tiles */
+.tile.mystery { border-color: var(--violet); color: var(--violet); box-shadow: 0 0 8px var(--violet), 0 0 18px var(--violet); text-shadow: 0 0 8px var(--violet); }
 .tile.mystery.on { border-color: var(--magenta); }
-@keyframes flicker { 0%, 90%, 94%, 100% { opacity: 1; } 92% { opacity: .5; } 96% { opacity: .75; } }
 /* Locks (board.js pickLocks): dimmed, untouchable and with what's left until they open */
 .tile.locked { border-style: dashed; border-color: #556; color: #667; box-shadow: none; text-shadow: none; pointer-events: none; }
 .tile.locked .badge { background: #ccd; box-shadow: 0 0 6px #ccd; }
