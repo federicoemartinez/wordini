@@ -108,7 +108,7 @@ vecinas. Con casillas normales da lo mismo.
 ### 6.4 Aviso
 
 Las formas no cambian ninguna regla, así que **no hay aviso emergente**. Va una línea nueva en "Cómo se juega",
-en es/en/fr: "Desde el nivel 40 la cancha puede ser más grande o tener forma."
+en es/en/fr: "Desde el nivel 40 el tablero puede ser más grande o tener forma." (la UI en español dice "tablero").
 
 ## 7. Lo que no cambia
 
