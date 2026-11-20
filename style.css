@@ -1,3 +1,6 @@
+/* Registered so the board can animate it into coral (wrong way) */
+@property --cyan { syntax: '<color>'; inherits: true; initial-value: #00e5ff; }
+
 :root {
   --bg: #0b0b14;
   --cyan: #00e5ff;
@@ -5,6 +8,7 @@
   --green: #39ff88;
   --gold: #ffd23f;
   --violet: #b26bff;
+  --coral: #ff8a3d;
   --dim: #3a3a55;
   --muted: #9a9ac0;
   --text: #ecebff;
@@ -75,7 +79,7 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 @keyframes rise { to { transform: translateY(-2rem); opacity: 0; } }
 
 /* Word in progress and result on release */
-#word { min-height: 2.4rem; display: grid; place-items: center; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; }
+#word { min-height: 2.4rem; display: grid; place-items: center; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; text-wrap: balance; }
 #word.live { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
 #word.good { color: var(--green); text-shadow: 0 0 12px var(--green); animation: pulse .4s; }
 #word.dup { color: var(--gold); text-shadow: 0 0 10px var(--gold); font-size: 1.1rem; }
@@ -97,7 +101,10 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  transition: --cyan .6s;
 }
+/* Wrong way (game.js read): the board's cyan turns coral; buttons and bar stay cyan */
+#board.wrong-way { --cyan: var(--coral); }
 
 .tile {
   position: relative;
@@ -106,7 +113,7 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
   border: 2px solid var(--cyan);
   border-radius: .7rem;
   background: #15152c;
-  box-shadow: 0 0 6px var(--cyan), inset 0 0 10px #00e5ff33;
+  box-shadow: 0 0 6px var(--cyan), inset 0 0 10px color-mix(in srgb, var(--cyan) 20%, transparent);
   font-size: calc(100cqi / var(--n) * .42);
   text-shadow: 0 0 6px var(--cyan);
   cursor: pointer;

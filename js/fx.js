@@ -42,6 +42,11 @@ export function good(len) {
   [523, 659, 784, 1047].slice(0, Math.min(4, len - 1)).forEach((f, k) => beep(f, 0.14, 'triangle', k * 0.05, 0.06));
 }
 
+// The board going wrong way: good()'s arpeggio going down, right after it.
+export function wrongWay() {
+  [1047, 784, 659, 523].forEach((f, k) => beep(f, 0.14, 'triangle', 0.3 + k * 0.07, 0.06));
+}
+
 export function gold() {
   beep(1568, 0.2, 'triangle', 0.12, 0.06);
   beep(2093, 0.3, 'triangle', 0.2, 0.05);
