@@ -119,6 +119,10 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 /* "?" tiles */
 .tile.mystery { border-color: var(--violet); color: var(--violet); box-shadow: 0 0 8px var(--violet), 0 0 18px var(--violet); text-shadow: 0 0 8px var(--violet); }
 .tile.mystery.on { border-color: var(--magenta); }
+/* Locks (board.js pickLocks): dimmed, untouchable and with what's left until they open */
+.tile.locked { border-style: dashed; border-color: #556; color: #667; box-shadow: none; text-shadow: none; pointer-events: none; }
+.tile.locked .badge { background: #ccd; box-shadow: 0 0 6px #ccd; }
+.tile.lock:not(.locked) .badge { display: none; }
 /* Letters drawn backwards (board.js pickFlipped) */
 .upside, .mirror { display: inline-block; }
 .upside { transform: rotate(180deg); }

@@ -5,6 +5,7 @@ const BIG_FROM = 11; // from this level on the grid is 5×5
 const MIN_COMMON = { 4: 25, 5: 50 }; // minimum common words per board
 const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
 const GOLD_FROM = 4;
+const LOCK_FROM = 15; // from this level on a tile may get locked for a few words (closed)
 export const TURN_FROM = 20; // from this level on the board turns/mirrors once at half the target (game.js turn)
 const FLIP_FROM = 30; // from this level on some letters are drawn upside down or mirrored (main.js renderBoard)
 const HIDE_FROM = 35; // from this level on some tiles always show "?" (shown)
@@ -13,6 +14,7 @@ const POINTS = [0, 0, 0, 1, 2, 4, 7, 11]; // by length; 8 or more = 16
 
 const pct = level => (level < BIG_FROM ? 0.2 + 0.025 * (level - 1) : Math.min(0.45, 0.25 + 0.01 * (level - BIG_FROM)));
 const maxGold = level => (level < GOLD_FROM ? 0 : level <= 10 ? 1 : level <= 20 ? 2 : 3);
+const maxLocks = level => (level < LOCK_FROM ? 0 : level < 40 ? 1 : 2);
 const maxHidden = level => (level < HIDE_FROM ? 0 : level < 50 ? 1 : 2);
 const maxFlipped = level => (level < FLIP_FROM ? 0 : level < 40 ? 4 : 5);
 // Letters that drawn each way would look the same, or like another one (M/W, P/d, U/n, J/f, V/Λ, J/L, Z/S).
@@ -82,11 +84,16 @@ export function turnBoard(board, t) {
   const letters = [];
   board.letters.forEach((c, i) => (letters[to(i)] = c));
   const gold = board.gold.map(g => ({ ...g, cell: to(g.cell) }));
-  return { ...board, letters, gold, hidden: board.hidden.map(to), flipped: board.flipped.map(f => ({ ...f, cell: to(f.cell) })) };
+  const move = x => ({ ...x, cell: to(x.cell) });
+  return { ...board, letters, gold, hidden: board.hidden.map(to), flipped: board.flipped.map(move), locks: board.locks.map(move) };
 }
 
 // Letters as the player sees them: "?" on the hidden tiles. The real letter is still the one that counts.
 export const shown = board => board.letters.map((c, i) => (board.hidden.includes(i) ? '?' : c));
+
+// Lock tiles closed after finding `found` words: each closes at `at` words and opens `need` words later. Closed
+// tiles can't be traced.
+export const closed = (board, found) => board.locks.filter(k => found.length >= k.at && found.length < k.at + k.need).map(k => k.cell);
 
 // `common` as a Set plus letter weights, computed once per list.
 const prepared = new WeakMap();
@@ -129,14 +136,14 @@ export function solve(letters, words) {
   return { found, through };
 }
 
-// Path for `word` through as many `prefer` tiles as possible; null if it can't be traced.
-export function pathFor(word, letters, prefer = []) {
+// Path for `word` through as many `prefer` tiles as possible and none of `avoid`; null if it can't be traced.
+export function pathFor(word, letters, prefer = [], avoid = []) {
   const adj = neighbors(Math.sqrt(letters.length));
   let best = null;
   let bestScore = -1;
   const path = [];
   const walk = i => {
-    if (letters[i] !== word[path.length] || path.includes(i)) return;
+    if (letters[i] !== word[path.length] || path.includes(i) || avoid.includes(i)) return;
     path.push(i);
     if (path.length === word.length) {
       const score = path.filter(c => prefer.includes(c)).length;
@@ -187,6 +194,21 @@ function pickFlipped(rand, level, letters, taken) {
   return flipped;
 }
 
+// Locks: the tiles most common words go through, so opening one feels like a prize. The first one is closed from the
+// start half the time, otherwise it closes after word 3-6; each opens 3-5 words later. One at a time: the next one
+// closes 1-4 words after the previous one opened (two at once could leave too few words to open them).
+function pickLocks(rand, level, through, taken) {
+  const n = maxLocks(level) && rand() < 0.5 ? maxLocks(level) : 0;
+  if (!n) return [];
+  const best = through.map((_, c) => c).filter(c => !taken.includes(c)).sort((a, b) => through[b].size - through[a].size);
+  let at = rand() < 0.5 ? 0 : 3 + Math.floor(rand() * 4);
+  return best.slice(0, n).map(cell => {
+    const lock = { cell, at, need: 3 + Math.floor(rand() * 3) };
+    at += lock.need + 1 + Math.floor(rand() * 4);
+    return lock;
+  });
+}
+
 export function createBoard(lang, level, words) {
   const rand = mulberry32(fnv1a(`${lang}:${level}`));
   const d = prepare(words);
@@ -200,12 +222,14 @@ export function createBoard(lang, level, words) {
     // Each special tile is picked after the previous ones and only from its level on: earlier boards stay the same
     const gold = pickGold(rand, level, through);
     const hidden = pickHidden(rand, level, through, gold.map(g => g.cell));
+    const flipped = pickFlipped(rand, level, letters, [...gold.map(g => g.cell), ...hidden]);
     return {
       size,
       letters,
       gold,
       hidden,
-      flipped: pickFlipped(rand, level, letters, [...gold.map(g => g.cell), ...hidden]),
+      flipped,
+      locks: pickLocks(rand, level, through, [...gold.map(g => g.cell), ...hidden, ...flipped.map(f => f.cell)]),
       threshold: Math.ceil(pct(level) * commonPoints),
       commonCount: common.length,
       missed: found => common.filter(w => !found.includes(w)),
