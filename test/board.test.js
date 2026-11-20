@@ -59,8 +59,9 @@ test('mismo idioma y nivel dan la misma cancha; otro nivel da otra', () => {
   assert.notDeepEqual(createBoard('es', 8, words.es).letters, a.letters);
 });
 
-test('niveles 1-200: tamaño, mínimos, umbral, doradas, ?, letras al revés y candados', () => {
+test('niveles 1-200: tamaño, mínimos, umbral, doradas, ?, letras al revés, candados y contramano', () => {
   let withLocks = 0;
+  let withWrong = 0;
   for (const l of LANGS) {
     for (let level = 1; level <= 200; level++) {
       const b = createBoard(l, level, words[l]);
@@ -100,6 +101,15 @@ test('niveles 1-200: tamaño, mínimos, umbral, doradas, ?, letras al revés y c
         assert.ok(free >= k.at + k.need, `${id}: no alcanzan las palabras para abrir el candado ${n}`);
       });
       assert.equal(new Set(b.locks.map(k => k.cell)).size, b.locks.length, `${id}: candados repetidos`);
+      assert.ok(b.wrongWay.length <= (level < 25 ? 0 : 3), id);
+      withWrong += b.wrongWay.length > 0;
+      const ats = b.locks.map(k => k.at);
+      b.wrongWay.forEach((n, k) => {
+        // La 1.ª después de la palabra 3-6, cada una 4-8 palabras después de la anterior; una más si caía con un candado
+        const [lo, hi] = k ? [b.wrongWay[k - 1] + 4, b.wrongWay[k - 1] + 8] : [3, 6];
+        assert.ok((n >= lo && n <= hi) || (n === hi + 1 && ats.includes(hi)), `${id}: contramano ${k} en ${n}`);
+        assert.ok(!ats.includes(n), `${id}: contramano en la misma palabra que un candado`);
+      });
       if (b.gold.length || b.hidden.length) {
         const { through } = solve(b.letters, words[l]);
         for (const g of b.gold) {
@@ -114,6 +124,7 @@ test('niveles 1-200: tamaño, mínimos, umbral, doradas, ?, letras al revés y c
     }
   }
   assert.ok(withLocks > 100 && withLocks < 400, `${withLocks} canchas con candado`); // más o menos la mitad desde el 15
+  assert.ok(withWrong > 180 && withWrong < 350, `${withWrong} canchas con contramano`); // más o menos la mitad desde el 25
 });
 
 test('las comunes del solver coinciden con una búsqueda independiente', () => {

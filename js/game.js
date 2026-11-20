@@ -4,6 +4,8 @@ import { isValid, pathFor, points, TURN_FROM, turnCell } from './board.js';
 export const newProgress = board => ({ found: [], goldLeft: board.gold.map(g => g.need), passed: false, ms: 0, hints: 0 });
 export const score = found => found.reduce((n, w) => n + points(w), 0);
 export const wordOf = (board, path) => path.map(i => board.letters[i]).join('');
+// The path in reading order: backwards while the board is wrong way (board.js pickWrongWay), until a word counts.
+export const read = (board, found, path) => (board.wrongWay.includes(found.length) ? [...path].reverse() : path);
 
 const adjacent = (a, b, size) =>
   Math.abs((a % size) - (b % size)) <= 1 && Math.abs(Math.floor(a / size) - Math.floor(b / size)) <= 1;
@@ -18,7 +20,7 @@ export function step(path, cell, size) {
 
 // Plays a path. Returns 'short' | 'invalid' | 'dup' | 'ok' | 'cleared' ('cleared' = ok and the level was just cleared).
 export function play(progress, board, words, path) {
-  const word = wordOf(board, path);
+  const word = wordOf(board, read(board, progress.found, path));
   if (word.length < 3) return 'short';
   if (!isValid(words, word)) return 'invalid';
   if (progress.found.includes(word)) return 'dup';

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TURN_FROM } from '../js/board.js';
-import { hint, newProgress, play, score, step, turn, wordOf } from '../js/game.js';
+import { hint, newProgress, play, read, score, step, turn, wordOf } from '../js/game.js';
 
 // C A S A
 // M O R S
@@ -13,6 +13,7 @@ const board = (gold = [], threshold = 100, locks = []) => ({
   letters: [...'CASAMORSZZZZZZZZ'],
   gold,
   locks,
+  wrongWay: [],
   threshold,
   missed: found => common.filter(w => !found.includes(w)),
 });
@@ -47,6 +48,25 @@ test('play: corta, inválida, repetida y nueva', () => {
   assert.equal(play(p, b, words, CASA), 'dup');
   assert.equal(play(p, b, words, [2, 1, 0]), 'ok'); // SAC: mismas casillas, otra palabra
   assert.deepEqual(p.found, ['CASA', 'SAC']);
+});
+
+test('read: de contramano el camino se lee al revés', () => {
+  const b = { ...board(), wrongWay: [1, 3] };
+  assert.deepEqual(read(b, [], ROMA), ROMA);
+  assert.deepEqual(read(b, ['CASA'], ROMA), [1, 4, 5, 6]);
+  assert.deepEqual(read(b, ['CASA', 'SAC'], ROMA), ROMA);
+  assert.deepEqual(read(b, ['CASA', 'SAC', 'MAS'], ROMA), [1, 4, 5, 6]);
+});
+
+test('play: de contramano ROMA trazada da AMOR; inválidas y repetidas no gastan el modo, y después vuelve', () => {
+  const b = { ...board(), wrongWay: [1] };
+  const p = newProgress(b);
+  assert.equal(play(p, b, words, CASA), 'ok');
+  assert.equal(play(p, b, words, [3, 2, 1, 0]), 'dup'); // al revés es CASA
+  assert.equal(play(p, b, words, [0, 1, 4]), 'invalid'); // MAC
+  assert.equal(play(p, b, words, ROMA), 'ok');
+  assert.equal(play(p, b, words, ROMA), 'ok');
+  assert.deepEqual(p.found, ['CASA', 'AMOR', 'ROMA']);
 });
 
 test('play: la misma palabra por otro camino no vuelve a sumar', () => {

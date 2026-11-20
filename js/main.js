@@ -1,6 +1,6 @@
 import { closed, createBoard, pathFor, points, shown, turnBoard } from './board.js';
 import { define } from './define.js';
-import { hint, newProgress, play, score, step, turn, wordOf } from './game.js';
+import { hint, newProgress, play, read, score, step, turn, wordOf } from './game.js';
 import { formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
 import { get, set, loadGame, saveGame, sameBoard, sigOf } from './state.js';
@@ -147,6 +147,7 @@ function render() {
   $('#score').textContent = `${pts} / ${board.threshold}`;
   $('#fill').style.width = `${Math.min(100, (100 * pts) / board.threshold)}%`;
   $('#bar').classList.toggle('done', pts >= board.threshold);
+  $('#board').classList.toggle('wrong-way', board.wrongWay.includes(game.found.length)); // coral (style.css)
   $('#common').textContent = `${board.commonCount - missed.length}/${board.commonCount} ${t(lang, 'common')}`;
   board.gold.forEach((g, k) => {
     const tile = $('#board').children[g.cell];
@@ -205,7 +206,7 @@ function renderPath() {
   tiles.forEach((tile, i) => tile.classList.toggle('on', path.includes(i)));
   const centers = path.map(i => `${tiles[i].offsetLeft + tiles[i].offsetWidth / 2},${tiles[i].offsetTop + tiles[i].offsetHeight / 2}`);
   line.setAttribute('points', centers.join(' '));
-  if (path.length || typed) say(typed || shownWord(path), 'live');
+  if (path.length || typed) say(typed || shownWord(read(board, game.found, path)), 'live');
 }
 
 function pop(text) {
@@ -219,7 +220,8 @@ const typedPath = () => pathFor(typed, shown(board), pendingGold(), closed(board
 const shownWord = p => p.map(i => shown(board)[i]).join(''); // with "?": what the player sees, not the real word
 
 function submit(p) {
-  const word = wordOf(board, p);
+  const r = read(board, game.found, p); // before play: it changes found.length
+  const word = wordOf(board, r);
   const goldBefore = game.goldLeft.join();
   const result = play(game, board, words, p);
   path = [];
@@ -230,7 +232,7 @@ function submit(p) {
     return;
   }
   if (result === 'invalid' || result === 'dup') {
-    say(`${shownWord(p)} · ${t(lang, result)}`, result); // with the "?": a miss doesn't give the letter away
+    say(`${shownWord(r)} · ${t(lang, result)}`, result); // with the "?": a miss doesn't give the letter away
     fx.bad();
     return;
   }
@@ -242,10 +244,12 @@ function submit(p) {
   idleFrom = elapsed();
   const shut = board.locks.filter(k => k.at && k.at === game.found.length); // this word closed them
   const opened = board.locks.filter(k => k.at + k.need === game.found.length); // ...or opened them
-  say([word, turned && t(lang, 'turned'), shut.length && t(lang, 'locked')].filter(Boolean).join(' · '), 'good');
+  const wrongWay = board.wrongWay.includes(game.found.length); // ...or the board just went wrong way
+  say([word, turned && t(lang, 'turned'), shut.length && t(lang, 'locked'), wrongWay && t(lang, 'wrongWay')].filter(Boolean).join(' · '), 'good');
   pop(`+${points(word)}`);
   fx.good(word.length);
   if (game.goldLeft.join() !== goldBefore || opened.length) fx.gold();
+  if (wrongWay) fx.wrongWay();
   if (turned) {
     renderBoard();
     fx.turn($('#board'), game.turn);

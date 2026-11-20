@@ -7,6 +7,7 @@ const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
 const GOLD_FROM = 4;
 const LOCK_FROM = 15; // from this level on a tile may get locked for a few words (closed)
 export const TURN_FROM = 20; // from this level on the board turns/mirrors once at half the target (game.js turn)
+const WRONG_FROM = 25; // from this level on the board may go wrong way for a word, now and then (game.js read)
 const FLIP_FROM = 30; // from this level on some letters are drawn upside down or mirrored (main.js renderBoard)
 const HIDE_FROM = 35; // from this level on some tiles always show "?" (shown)
 const MAX_TRIES = 500;
@@ -209,6 +210,20 @@ function pickLocks(rand, level, through, taken) {
   });
 }
 
+// Wrong way: after this many words, the next one that counts is traced backwards. Half the boards, 1-3 times: the
+// first after word 3-6, each next one 4-8 words later; one word later if a lock closes on it (one surprise at a time).
+function pickWrongWay(rand, level, lockAts) {
+  if (level < WRONG_FROM || rand() >= 0.5) return [];
+  const wrongWay = [];
+  let at = 3 + Math.floor(rand() * 4);
+  for (let n = 1 + Math.floor(rand() * 3); n > 0; n--) {
+    if (lockAts.includes(at)) at++;
+    wrongWay.push(at);
+    at += 4 + Math.floor(rand() * 5);
+  }
+  return wrongWay;
+}
+
 export function createBoard(lang, level, words) {
   const rand = mulberry32(fnv1a(`${lang}:${level}`));
   const d = prepare(words);
@@ -223,13 +238,15 @@ export function createBoard(lang, level, words) {
     const gold = pickGold(rand, level, through);
     const hidden = pickHidden(rand, level, through, gold.map(g => g.cell));
     const flipped = pickFlipped(rand, level, letters, [...gold.map(g => g.cell), ...hidden]);
+    const locks = pickLocks(rand, level, through, [...gold.map(g => g.cell), ...hidden, ...flipped.map(f => f.cell)]);
     return {
       size,
       letters,
       gold,
       hidden,
       flipped,
-      locks: pickLocks(rand, level, through, [...gold.map(g => g.cell), ...hidden, ...flipped.map(f => f.cell)]),
+      locks,
+      wrongWay: pickWrongWay(rand, level, locks.map(k => k.at)),
       threshold: Math.ceil(pct(level) * commonPoints),
       commonCount: common.length,
       missed: found => common.filter(w => !found.includes(w)),
