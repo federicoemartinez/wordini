@@ -109,12 +109,22 @@ test('hint: prefiere una palabra que pase por una dorada pendiente', () => {
 });
 
 test('hint: con un candado cerrado elige otra palabra; si todas pasan por ahí, no hay pista', () => {
-  const b = board([], 100, [{ cell: 3, need: 1 }]); // la última A de CASA y CASAS
+  const b = board([], 100, [{ cell: 3, at: 0, need: 1 }]); // la última A de CASA y CASAS
   const p = newProgress(b);
   hint(p, b);
   assert.deepEqual(p.hint.path, [1, 4, 5, 6]); // AMOR
-  const only = { ...b, locks: [{ cell: 1, need: 1 }] }; // la A que usan todas
+  const only = { ...b, locks: [{ cell: 1, at: 0, need: 1 }] }; // la A que usan todas
   assert.equal(hint(newProgress(only), only), false);
+});
+
+test('hint: tampoco pasa por un candado que todavía no apareció; sí por uno ya abierto', () => {
+  const b = board([], 100, [{ cell: 3, at: 2, need: 1 }]); // se cierra con 2 palabras: no puede caer sobre la pista
+  const p = newProgress(b);
+  hint(p, b);
+  assert.deepEqual(p.hint.path, [1, 4, 5, 6]); // AMOR, no CASAS
+  const q = { ...newProgress(b), found: ['MAS', 'SAC', 'ROMA'] }; // 3 palabras: ya se abrió
+  hint(q, b);
+  assert.deepEqual(q.hint.path, [0, 1, 2, 3, 7]); // CASAS
 });
 
 test('hint: encontrar la palabra la borra; sin comunes que falten no hay pista', () => {

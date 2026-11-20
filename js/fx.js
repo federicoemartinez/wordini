@@ -65,6 +65,15 @@ export function turn(board, t) {
   for (const tile of board.querySelectorAll('.tile')) tile.animate([{ transform: `rotate(${deg}deg) scaleX(${s})` }, { transform: done }], opts);
 }
 
+// A lock that just closed: a low "clack" and the tile shrinks and bounces back.
+export function close(tile) {
+  beep(220, 0.06, 'square', 0.1, 0.05);
+  beep(110, 0.12, 'square', 0.16, 0.05);
+  navigator.vibrate?.(40);
+  if (calm) return;
+  tile.animate([{ transform: 'scale(1)' }, { transform: 'scale(.75)' }, { transform: 'scale(1.08)' }, { transform: 'none' }], { duration: 450, easing: 'ease-out' });
+}
+
 // A lock that just opened lights up in a burst.
 export function open(tile) {
   if (calm) return;

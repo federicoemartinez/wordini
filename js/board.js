@@ -5,7 +5,7 @@ const BIG_FROM = 11; // from this level on the grid is 5×5
 const MIN_COMMON = { 4: 25, 5: 50 }; // minimum common words per board
 const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
 const GOLD_FROM = 4;
-const LOCK_FROM = 15; // from this level on a tile may be locked until some words are found (closed)
+const LOCK_FROM = 15; // from this level on a tile may get locked for a few words (closed)
 export const TURN_FROM = 20; // from this level on the board turns/mirrors once at half the target (game.js turn)
 const FLIP_FROM = 30; // from this level on some letters are drawn upside down or mirrored (main.js renderBoard)
 const HIDE_FROM = 35; // from this level on some tiles always show "?" (shown)
@@ -91,8 +91,9 @@ export function turnBoard(board, t) {
 // Letters as the player sees them: "?" on the hidden tiles. The real letter is still the one that counts.
 export const shown = board => board.letters.map((c, i) => (board.hidden.includes(i) ? '?' : c));
 
-// Lock tiles still closed after finding `found` words: they can't be traced yet.
-export const closed = (board, found) => board.locks.filter(k => found.length < k.need).map(k => k.cell);
+// Lock tiles closed after finding `found` words: each closes at `at` words and opens `need` words later. Closed
+// tiles can't be traced.
+export const closed = (board, found) => board.locks.filter(k => found.length >= k.at && found.length < k.at + k.need).map(k => k.cell);
 
 // `common` as a Set plus letter weights, computed once per list.
 const prepared = new WeakMap();
@@ -193,12 +194,19 @@ function pickFlipped(rand, level, letters, taken) {
   return flipped;
 }
 
-// Locks: the tiles most common words go through, so opening one feels like a prize. The first opens after 3-5 words
-// found, the second after 6-8: they open at different times.
+// Locks: the tiles most common words go through, so opening one feels like a prize. The first one is closed from the
+// start half the time, otherwise it closes after word 3-6; each opens 3-5 words later. One at a time: the next one
+// closes 1-4 words after the previous one opened (two at once could leave too few words to open them).
 function pickLocks(rand, level, through, taken) {
   const n = maxLocks(level) && rand() < 0.5 ? maxLocks(level) : 0;
+  if (!n) return [];
   const best = through.map((_, c) => c).filter(c => !taken.includes(c)).sort((a, b) => through[b].size - through[a].size);
-  return best.slice(0, n).map((cell, k) => ({ cell, need: 3 + 3 * k + Math.floor(rand() * 3) }));
+  let at = rand() < 0.5 ? 0 : 3 + Math.floor(rand() * 4);
+  return best.slice(0, n).map(cell => {
+    const lock = { cell, at, need: 3 + Math.floor(rand() * 3) };
+    at += lock.need + 1 + Math.floor(rand() * 4);
+    return lock;
+  });
 }
 
 export function createBoard(lang, level, words) {

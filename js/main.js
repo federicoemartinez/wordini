@@ -73,7 +73,7 @@ function enterLevel(saved) {
   renderBoard();
   render();
   // Each kind of special tile is explained the first time it shows up; then it's in the help
-  const news = [['mystery', board.hidden], ['lock', board.locks]].find(([k, cells]) => cells.length && !get(storage, `wordini:${k}-seen`))?.[0];
+  const news = [['mystery', board.hidden], ['lock', closed(board, game.found)]].find(([k, cells]) => cells.length && !get(storage, `wordini:${k}-seen`))?.[0];
   if (news) set(storage, `wordini:${news}-seen`, true);
   say(news ? t(lang, news) : '', 'note');
 }
@@ -157,7 +157,7 @@ function render() {
   for (const k of board.locks) {
     const tile = $('#board').children[k.cell];
     tile.classList.toggle('locked', shut.includes(k.cell)); // .locked can't be touched (style.css): the trace skips it
-    tile.querySelector('.badge').textContent = `🔒${k.need - game.found.length}`;
+    tile.querySelector('.badge').textContent = `🔒${k.at + k.need - game.found.length}`;
   }
   const lengths = [...new Set(game.found.map(w => w.length))].sort((a, b) => b - a);
   $('#found-title').textContent = `${t(lang, 'found')} (${game.found.length})`;
@@ -240,10 +240,11 @@ function submit(p) {
   if (turned) board = turnBoard(board, game.turn);
   saveGame(storage, lang, game);
   idleFrom = elapsed();
-  say(turned ? `${word} · ${t(lang, 'turned')}` : word, 'good');
+  const shut = board.locks.filter(k => k.at && k.at === game.found.length); // this word closed them
+  const opened = board.locks.filter(k => k.at + k.need === game.found.length); // ...or opened them
+  say([word, turned && t(lang, 'turned'), shut.length && t(lang, 'locked')].filter(Boolean).join(' · '), 'good');
   pop(`+${points(word)}`);
   fx.good(word.length);
-  const opened = board.locks.filter(k => k.need === game.found.length); // this word opened them
   if (game.goldLeft.join() !== goldBefore || opened.length) fx.gold();
   if (turned) {
     renderBoard();
@@ -251,6 +252,8 @@ function submit(p) {
   }
   render();
   for (const k of opened) fx.open($('#board').children[k.cell]);
+  for (const k of shut) fx.close($('#board').children[k.cell]);
+  if (shut.length) set(storage, 'wordini:lock-seen', true); // just explained: no need to say it again on entering a level
   if (result === 'cleared') {
     fx.win();
     const g = game;

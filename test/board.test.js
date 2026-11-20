@@ -90,15 +90,16 @@ test('niveles 1-200: tamaño, mínimos, umbral, doradas, ?, letras al revés y c
       withLocks += b.locks.length > 0;
       const others = [...b.gold.map(g => g.cell), ...b.hidden, ...b.flipped.map(f => f.cell)];
       b.locks.forEach((k, n) => {
-        assert.ok(k.need >= 3 + 3 * n && k.need <= 5 + 3 * n, `${id}: candado ${n} pide ${k.need}`);
+        assert.ok(k.need >= 3 && k.need <= 5, `${id}: candado ${n} pide ${k.need}`);
+        const prev = b.locks[n - 1];
+        const from = prev ? prev.at + prev.need + 1 : 3; // de a uno: se cierra después de que se abrió el anterior
+        assert.ok((!prev && k.at === 0) || (k.at >= from && k.at <= from + 3), `${id}: candado ${n} se cierra en ${k.at}`);
         assert.ok(!others.includes(k.cell), `${id}: candado sobre otra especial`);
+        // Armables sin pasar por él: alcanzan aunque todas las de antes de cerrarse hayan sido de estas
+        const free = common.filter(w => pathFor(w, b.letters, [], [k.cell])).length;
+        assert.ok(free >= k.at + k.need, `${id}: no alcanzan las palabras para abrir el candado ${n}`);
       });
-      if (b.locks.length) {
-        const cells = b.locks.map(k => k.cell);
-        assert.equal(new Set(cells).size, cells.length, `${id}: candados repetidos`);
-        const free = common.filter(w => pathFor(w, b.letters, [], cells)).length; // armables con todo cerrado
-        assert.ok(free >= Math.max(...b.locks.map(k => k.need)), `${id}: no alcanzan las palabras para abrir`);
-      }
+      assert.equal(new Set(b.locks.map(k => k.cell)).size, b.locks.length, `${id}: candados repetidos`);
       if (b.gold.length || b.hidden.length) {
         const { through } = solve(b.letters, words[l]);
         for (const g of b.gold) {
@@ -153,11 +154,13 @@ test('pathFor esquiva las casillas pedidas (candados cerrados)', () => {
   assert.equal(pathFor('ASA', letters, [], [1]), null); // la única S está cerrada
 });
 
-test('closed: los candados siguen cerrados hasta encontrar `need` palabras', () => {
-  const b = { locks: [{ cell: 7, need: 3 }, { cell: 2, need: 6 }] };
-  assert.deepEqual(closed(b, ['SOL', 'MAR']), [7, 2]);
-  assert.deepEqual(closed(b, ['SOL', 'MAR', 'LUZ']), [2]);
-  assert.deepEqual(closed(b, [...'ABCDEF']), []);
+test('closed: cada candado se cierra al llegar a `at` palabras y se abre `need` palabras después', () => {
+  const b = { locks: [{ cell: 7, at: 0, need: 3 }, { cell: 2, at: 5, need: 4 }] };
+  assert.deepEqual(closed(b, []), [7]);
+  assert.deepEqual(closed(b, [...'ABC']), []);
+  assert.deepEqual(closed(b, [...'ABCDE']), [2]);
+  assert.deepEqual(closed(b, [...'ABCDEFGH']), [2]);
+  assert.deepEqual(closed(b, [...'ABCDEFGHI']), []);
   assert.deepEqual(closed({ locks: [] }, []), []);
 });
 
