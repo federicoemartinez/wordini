@@ -123,16 +123,20 @@ function say(text, cls = '') {
 function renderBoard() {
   const el = $('#board');
   el.style.setProperty('--n', board.size);
+  el.classList.toggle('tilt', board.shape === 'tilt');
   el.replaceChildren(
     ...shown(board).map((c, i) => {
-      const tile = Object.assign(document.createElement('div'), { className: c === '?' ? 'tile mystery' : 'tile', textContent: c });
+      if (c === null) return Object.assign(document.createElement('div'), { className: 'hole' }); // keeps its place in the grid
+      const tile = Object.assign(document.createElement('div'), { className: c === '?' ? 'tile mystery' : 'tile' });
       tile.dataset.i = i;
+      // The letter in a span, so it can be flipped, or kept upright on the tilted board, without touching the tile
+      // (fx.turn animates the tile, and the hint arrow goes in it)
+      tile.append(Object.assign(document.createElement('span'), { textContent: c }));
       return tile;
     }),
     trail,
   );
-  // A span, so the board turning (fx.turn animates the tile) doesn't undo the flip, and the hint arrow isn't flipped
-  for (const f of board.flipped) el.children[f.cell].replaceChildren(Object.assign(document.createElement('span'), { className: f.flip, textContent: board.letters[f.cell] }));
+  for (const f of board.flipped) el.children[f.cell].firstChild.className = f.flip;
   for (const g of board.gold) el.children[g.cell].classList.add('gold');
   for (const k of board.locks) el.children[k.cell].classList.add('lock');
   for (const c of [...board.gold, ...board.locks]) el.children[c.cell].append(Object.assign(document.createElement('b'), { className: 'badge' }));
@@ -202,7 +206,7 @@ function meaning(word) {
 
 // Highlights the path, draws the line through the tile centers and shows the word in progress.
 function renderPath() {
-  const tiles = [...$('#board').querySelectorAll('.tile')];
+  const tiles = [...$('#board').children]; // by cell number, holes included (the trail comes last)
   tiles.forEach((tile, i) => tile.classList.toggle('on', path.includes(i)));
   const centers = path.map(i => `${tiles[i].offsetLeft + tiles[i].offsetWidth / 2},${tiles[i].offsetTop + tiles[i].offsetHeight / 2}`);
   line.setAttribute('points', centers.join(' '));
@@ -268,14 +272,15 @@ function submit(p) {
   }
 }
 
-// Only each tile's central circle counts, so a diagonal doesn't grab a neighbor by mistake.
+// Only each tile's central circle counts, so a diagonal doesn't grab a neighbor by mistake. Its radius comes from
+// offsetWidth, the untransformed size: on the tilted board a tile's rect is √2 wider.
 function tileAt(x, y) {
   const tile = document.elementFromPoint(x, y)?.closest('#board .tile');
   if (!tile) return null;
   const r = tile.getBoundingClientRect();
   const dx = x - (r.left + r.width / 2);
   const dy = y - (r.top + r.height / 2);
-  return dx * dx + dy * dy <= (0.36 * r.width) ** 2 ? Number(tile.dataset.i) : null;
+  return dx * dx + dy * dy <= (0.36 * tile.offsetWidth) ** 2 ? Number(tile.dataset.i) : null;
 }
 
 function onPointerDown(e) {

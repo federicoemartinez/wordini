@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { closed, createBoard, isValid, neighbors, pathFor, points, shown, solve, turnBoard, turnCell } from '../js/board.js';
+import { closed, createBoard, isValid, neighbors, pathFor, points, shown, solve, SHAPES, turnBoard, turnCell } from '../js/board.js';
 
 const LANGS = ['es', 'en', 'fr'];
 const words = Object.fromEntries(
@@ -11,6 +11,11 @@ const tiny = { alphabet: 'ACMORS', valid: ['AMOR', 'CASA', 'CASAS', 'MAS', 'ROMA
 // Letras que dibujadas así quedan iguales o parecen otra (M/W, P/d, U/n, J/f, V/Λ, J/L, Z/S): nunca se dan vuelta de esa forma.
 const LOOKALIKE = { upside: 'HINOSXZMWVPUJ', mirror: 'AHIMOTUVWXYJLZ' };
 const adjacent = (a, b, size) => a !== b && Math.abs((a % size) - (b % size)) <= 1 && Math.abs(Math.floor(a / size) - Math.floor(b / size)) <= 1;
+
+// Primer nivel desde el 40 cuya cancha tiene la forma `shape`.
+function firstLevel(l, shape) {
+  for (let level = 40; ; level++) if (createBoard(l, level, words[l]).shape === shape) return level;
+}
 
 // Otra implementación, sin poda ni bisección: ¿se puede armar `word` en la grilla?
 function onBoard(letters, word) {
@@ -59,22 +64,31 @@ test('mismo idioma y nivel dan la misma cancha; otro nivel da otra', () => {
   assert.notDeepEqual(createBoard('es', 8, words.es).letters, a.letters);
 });
 
-test('niveles 1-200: tamaño, mínimos, umbral, doradas, ?, letras al revés, candados y contramano', () => {
+test('niveles 1-200: tamaño, forma, mínimos, umbral, doradas, ?, letras al revés, candados y contramano', () => {
   let withLocks = 0;
   let withWrong = 0;
+  const kinds = { 5: 0, 6: 0, shape: 0 };
+  const shapes = new Set();
   for (const l of LANGS) {
     for (let level = 1; level <= 200; level++) {
       const b = createBoard(l, level, words[l]);
       const id = `${l}:${level}`;
-      const size = level <= 10 ? 4 : 5;
-      assert.equal(b.size, size, id);
-      assert.equal(b.letters.length, size * size, id);
+      if (level < 40) assert.deepEqual([b.shape, b.size], ['square', level <= 10 ? 4 : 5], id);
+      else kinds[b.shape === 'square' ? b.size : 'shape']++;
+      if (b.shape !== 'square') shapes.add(b.shape);
+      const mask = b.shape === 'square' ? Array(b.size).fill('#'.repeat(b.size)) : SHAPES[b.shape];
+      assert.equal(b.letters.map(c => (c === null ? '.' : '#')).join(''), mask.join(''), `${id}: ${b.shape}`);
+      const cells = b.letters.filter(c => c !== null).length;
       const common = b.missed([]);
       assert.equal(common.length, b.commonCount, id);
-      assert.ok(common.length >= (size === 4 ? 25 : 50), id);
-      assert.ok(common.some(w => w.length >= (size === 4 ? 6 : 7)), id);
+      assert.ok(common.length >= (cells === 16 ? 25 : 2 * cells), id);
+      assert.ok(common.some(w => w.length >= (cells === 16 ? 6 : 7)), id);
       const total = common.reduce((n, w) => n + points(w), 0);
       assert.ok(b.threshold > 0 && b.threshold <= total, id);
+      // Desde el 40, pct ya está en su tope (0.45): las canchas grandes piden un poco menos (spec §5)
+      if (level >= 40) assert.equal(b.threshold, Math.ceil(0.45 * total * Math.min(1, Math.sqrt(25 / cells))), `${id}: umbral`);
+      const special = [...b.gold.map(g => g.cell), ...b.hidden, ...b.flipped.map(f => f.cell), ...b.locks.map(k => k.cell)];
+      assert.ok(special.every(c => b.letters[c] !== null), `${id}: casilla especial en un hueco`);
       const maxGold = level < 4 ? 0 : level <= 10 ? 1 : level <= 20 ? 2 : 3;
       assert.ok(b.gold.length <= maxGold, id);
       assert.equal(new Set(b.gold.map(g => g.cell)).size, b.gold.length, `${id}: doradas repetidas`);
@@ -125,6 +139,11 @@ test('niveles 1-200: tamaño, mínimos, umbral, doradas, ?, letras al revés, ca
   }
   assert.ok(withLocks > 100 && withLocks < 400, `${withLocks} canchas con candado`); // más o menos la mitad desde el 15
   assert.ok(withWrong > 180 && withWrong < 350, `${withWrong} canchas con contramano`); // más o menos la mitad desde el 25
+  // Del 40 al 200 (161 canchas por idioma): la mitad 5×5, un cuarto 6×6, un cuarto con forma, y salen todas las formas
+  const n = 3 * 161;
+  assert.ok(kinds[5] > 0.4 * n && kinds[5] < 0.6 * n, JSON.stringify(kinds));
+  for (const k of [6, 'shape']) assert.ok(kinds[k] > 0.15 * n && kinds[k] < 0.35 * n, JSON.stringify(kinds));
+  assert.deepEqual([...shapes].sort(), Object.keys(SHAPES).sort());
 });
 
 test('las comunes del solver coinciden con una búsqueda independiente', () => {
@@ -201,19 +220,21 @@ test('turnCell: giro horario y espejo en 3×3', () => {
 
 test('turnBoard: las 7 simetrías mueven todo y dejan las mismas palabras', () => {
   for (const l of LANGS) {
-    const b = createBoard(l, 55, words[l]);
-    const before = [...solve(b.letters, words[l]).found].sort();
-    for (let t = 1; t < 8; t++) {
-      const to = turnCell(b.size, t);
-      const c = turnBoard(b, t);
-      assert.equal(new Set(b.letters.map((_, i) => to(i))).size, b.letters.length, `${l} ${t}: no es una permutación`);
-      b.letters.forEach((x, i) => assert.equal(c.letters[to(i)], x));
-      assert.deepEqual(c.gold, b.gold.map(g => ({ ...g, cell: to(g.cell) })));
-      assert.deepEqual(c.hidden, b.hidden.map(to));
-      assert.deepEqual(c.flipped, b.flipped.map(f => ({ ...f, cell: to(f.cell) })));
-      assert.deepEqual(c.locks, b.locks.map(k => ({ ...k, cell: to(k.cell) })));
-      assert.deepEqual([...solve(c.letters, words[l]).found].sort(), before, `${l} ${t}`);
-      assert.deepEqual(c.missed([]), b.missed([]));
+    for (const level of [55, firstLevel(l, 'donut')]) {
+      const b = createBoard(l, level, words[l]);
+      const before = [...solve(b.letters, words[l]).found].sort();
+      for (let t = 1; t < 8; t++) {
+        const to = turnCell(b.size, t);
+        const c = turnBoard(b, t);
+        assert.equal(new Set(b.letters.map((_, i) => to(i))).size, b.letters.length, `${l} ${t}: no es una permutación`);
+        b.letters.forEach((x, i) => assert.equal(c.letters[to(i)], x));
+        assert.deepEqual(c.gold, b.gold.map(g => ({ ...g, cell: to(g.cell) })));
+        assert.deepEqual(c.hidden, b.hidden.map(to));
+        assert.deepEqual(c.flipped, b.flipped.map(f => ({ ...f, cell: to(f.cell) })));
+        assert.deepEqual(c.locks, b.locks.map(k => ({ ...k, cell: to(k.cell) })));
+        assert.deepEqual([...solve(c.letters, words[l]).found].sort(), before, `${l} ${t}`);
+        assert.deepEqual(c.missed([]), b.missed([]));
+      }
     }
   }
 });
@@ -225,4 +246,27 @@ test('rendimiento: createBoard 5×5 tarda menos de 50 ms en promedio', () => {
     const avg = (performance.now() - t0) / 50;
     assert.ok(avg < 50, `${l}: ${avg.toFixed(1)} ms promedio`);
   }
+});
+
+test('formas: cuadradas y simétricas ante las 8 simetrías del cuadrado (la cancha puede girar)', () => {
+  for (const [name, rows] of Object.entries(SHAPES)) {
+    const on = rows.join('');
+    assert.ok(rows.every(r => r.length === rows.length) && /^[#.]+$/.test(on), name);
+    for (let t = 1; t < 8; t++) {
+      const to = turnCell(rows.length, t);
+      for (let i = 0; i < on.length; i++) assert.equal(on[to(i)], on[i], `${name}: la simetría ${t} lleva ${i} a ${to(i)}`);
+    }
+  }
+});
+
+test('solve y pathFor saltean los huecos', () => {
+  // C A ·
+  // · S A      se arman CASA y SAC; los huecos (·) no tienen palabras
+  // · · ·
+  const letters = ['C', 'A', null, null, 'S', 'A', null, null, null];
+  const { found, through } = solve(letters, tiny);
+  assert.deepEqual([...found].sort(), ['CASA', 'SAC']);
+  for (const i of [2, 3, 6, 7, 8]) assert.equal(through[i].size, 0, `hueco ${i}`);
+  assert.deepEqual(pathFor('CASA', letters), [0, 1, 4, 5]);
+  assert.equal(pathFor('CASAS', letters), null);
 });

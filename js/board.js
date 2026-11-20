@@ -2,8 +2,9 @@
 
 // Difficulty knobs (spec §4.6). Calibrate with `node tools/levels.mjs <lang>`.
 const BIG_FROM = 11; // from this level on the grid is 5×5
-const MIN_COMMON = { 4: 25, 5: 50 }; // minimum common words per board
-const LONG = { 4: 6, 5: 7 }; // minimum length of the "prize word"
+const SHAPE_FROM = 40; // from this level on a board may be 6×6 or have a shape (pickShape)
+const minCommon = cells => (cells === 16 ? 25 : 2 * cells); // minimum common words per board: 4×4 25, 5×5 50
+const minLong = cells => (cells === 16 ? 6 : 7); // minimum length of the "prize word"
 const GOLD_FROM = 4;
 const LOCK_FROM = 15; // from this level on a tile may get locked for a few words (closed)
 export const TURN_FROM = 20; // from this level on the board turns/mirrors once at half the target (game.js turn)
@@ -21,6 +22,16 @@ const maxFlipped = level => (level < FLIP_FROM ? 0 : level < 40 ? 4 : 5);
 // Letters that drawn each way would look the same, or like another one (M/W, P/d, U/n, J/f, V/Λ, J/L, Z/S).
 const LOOKALIKE = { upside: 'HINOSXZMWVPUJ', mirror: 'AHIMOTUVWXYJLZ' };
 const flipsOf = c => Object.keys(LOOKALIKE).filter(f => !LOOKALIKE[f].includes(c));
+// Boards with a shape: '#' a tile, '.' a hole. Each one looks the same after any of the 8 symmetries of the square,
+// so the board can still turn (turnCell). `tilt` is the 5×5, drawn turned 45° (style.css).
+export const SHAPES = {
+  tilt: ['#####', '#####', '#####', '#####', '#####'],
+  diamond: ['...#...', '..###..', '.#####.', '#######', '.#####.', '..###..', '...#...'],
+  spikes: ['...#...', '.#####.', '.#####.', '#######', '.#####.', '.#####.', '...#...'],
+  cross: ['..##..', '..##..', '######', '######', '..##..', '..##..'],
+  octagon: ['..##..', '.####.', '######', '######', '.####.', '..##..'],
+  donut: ['######', '######', '##..##', '##..##', '######', '######'],
+};
 
 export const points = word => POINTS[word.length] ?? 16;
 
@@ -123,6 +134,7 @@ export function solve(letters, words) {
   const through = letters.map(() => new Set());
   const path = [];
   const walk = (i, s) => {
+    if (letters[i] === null) return; // a hole (SHAPES)
     s += letters[i];
     if (!isPrefix(words, s)) return;
     path.push(i);
@@ -186,7 +198,7 @@ function pickHidden(rand, level, through, taken) {
 function pickFlipped(rand, level, letters, taken) {
   const flipped = [];
   for (let k = 0; k < maxFlipped(level); k++) {
-    const options = letters.map((_, c) => c).filter(c => flipsOf(letters[c]).length && !taken.includes(c) && !flipped.some(f => f.cell === c));
+    const options = letters.map((_, c) => c).filter(c => letters[c] && flipsOf(letters[c]).length && !taken.includes(c) && !flipped.some(f => f.cell === c));
     if (!options.length) break;
     const cell = options[Math.floor(rand() * options.length)];
     const ways = flipsOf(letters[cell]);
@@ -224,15 +236,32 @@ function pickWrongWay(rand, level, lockAts) {
   return wrongWay;
 }
 
+// From SHAPE_FROM on: half the boards 5×5, a quarter 6×6, a quarter with a shape. With its own generator: drawing
+// from the letters' one would change every board from there on, the 5×5 ones too.
+function pickShape(lang, level) {
+  const square = size => ({ shape: 'square', rows: Array(size).fill('#'.repeat(size)) });
+  if (level < SHAPE_FROM) return square(level < BIG_FROM ? 4 : 5);
+  const rand = mulberry32(fnv1a(`${lang}:${level}:shape`));
+  const x = rand();
+  if (x < 0.5) return square(5);
+  if (x < 0.75) return square(6);
+  const names = Object.keys(SHAPES);
+  const shape = names[Math.floor(rand() * names.length)];
+  return { shape, rows: SHAPES[shape] };
+}
+
 export function createBoard(lang, level, words) {
   const rand = mulberry32(fnv1a(`${lang}:${level}`));
   const d = prepare(words);
-  const size = level < BIG_FROM ? 4 : 5;
+  const { shape, rows } = pickShape(lang, level);
+  const size = rows.length;
+  const mask = [...rows.join('')].map(c => c === '#');
+  const cells = mask.filter(Boolean).length;
   for (let tries = 0; tries < MAX_TRIES; tries++) {
-    const letters = Array.from({ length: size * size }, () => weightedLetter(rand, d));
+    const letters = mask.map(on => (on ? weightedLetter(rand, d) : null)); // null: a hole
     const { found, through } = solve(letters, words);
     const common = [...found].filter(w => d.common.has(w)).sort();
-    if (common.length < MIN_COMMON[size] || !common.some(w => w.length >= LONG[size])) continue;
+    if (common.length < minCommon(cells) || !common.some(w => w.length >= minLong(cells))) continue;
     const commonPoints = common.reduce((n, w) => n + points(w), 0);
     // Each special tile is picked after the previous ones and only from its level on: earlier boards stay the same
     const gold = pickGold(rand, level, through);
@@ -241,13 +270,16 @@ export function createBoard(lang, level, words) {
     const locks = pickLocks(rand, level, through, [...gold.map(g => g.cell), ...hidden, ...flipped.map(f => f.cell)]);
     return {
       size,
+      shape,
       letters,
       gold,
       hidden,
       flipped,
       locks,
       wrongWay: pickWrongWay(rand, level, locks.map(k => k.at)),
-      threshold: Math.ceil(pct(level) * commonPoints),
+      // Bigger boards ask for a bit less of what's there: halfway (in proportion) between the same share as a 5×5
+      // and the same points
+      threshold: Math.ceil(pct(level) * commonPoints * Math.min(1, Math.sqrt(25 / cells))),
       commonCount: common.length,
       missed: found => common.filter(w => !found.includes(w)),
     };

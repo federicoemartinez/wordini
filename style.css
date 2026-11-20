@@ -96,7 +96,8 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
   aspect-ratio: 1;
   display: grid;
   grid-template-columns: repeat(var(--n), 1fr);
-  gap: .5rem;
+  grid-template-rows: repeat(var(--n), 1fr);
+  gap: min(.5rem, 2.5rem / var(--n)); /* .5rem up to 5×5, a bit tighter 6 and 7 wide */
   container-type: inline-size;
   touch-action: none;
   user-select: none;
@@ -105,6 +106,11 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 }
 /* Wrong way (game.js read): the board's cyan turns coral; buttons and bar stay cyan */
 #board.wrong-way { --cyan: var(--coral); }
+/* The diamond board (board.js SHAPES.tilt) is the 5×5 turned 45°, with letters and badges turned back. `rotate`, not
+   `transform`: fx.turn animates the transform of the board and its tiles, and .tile.on sets it. √2 narrower and with
+   room above and below, so its corners take the place of the usual square. */
+#board.tilt { rotate: 45deg; width: min(70.7%, 17rem); margin-block: min(14.6%, 3.5rem); }
+.tilt .tile > span, .tilt .badge { rotate: -45deg; }
 
 .tile {
   position: relative;
