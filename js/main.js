@@ -245,7 +245,10 @@ function submit(p) {
   const shut = board.locks.filter(k => k.at && k.at === game.found.length); // this word closed them
   const opened = board.locks.filter(k => k.at + k.need === game.found.length); // ...or opened them
   const wrongWay = board.wrongWay.includes(game.found.length); // ...or the board just went wrong way
-  say([word, turned && t(lang, 'turned'), shut.length && t(lang, 'locked'), wrongWay && t(lang, 'wrongWay')].filter(Boolean).join(' · '), 'good');
+  if (wrongWay && !get(storage, 'wordini:wrong-way-seen')) {
+    set(storage, 'wordini:wrong-way-seen', true);
+    say(t(lang, 'wrongWayNote'), 'note'); // the first time, how to get out of it instead of the word found
+  } else say([word, turned && t(lang, 'turned'), shut.length && t(lang, 'locked'), wrongWay && t(lang, 'wrongWay')].filter(Boolean).join(' · '), 'good');
   pop(`+${points(word)}`);
   fx.good(word.length);
   if (game.goldLeft.join() !== goldBefore || opened.length) fx.gold();
