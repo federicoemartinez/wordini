@@ -21,6 +21,7 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
 - **Giro a los 2:30:** a mitad de partida la cancha gira o se espeja una vez, como desde el nivel 20 (`turnBoard` y `fx.turn`): misma animación, mismo sonido y el cartel "¡El tablero giró!". El giro sale de la sala (`1 + created % 7`), así que es el mismo para los dos y llega al mismo tiempo (hora del servidor). Si había un trazo en curso, se cancela, porque sus casillas cambiaron de lugar. Si el celu abre la sala después de la mitad, la cancha aparece ya girada, sin animación ni cartel.
 - **Idioma:** el de quien crea la sala. El que entra juega en ese idioma.
 - **Duración:** una cuenta regresiva de 3 s y después **5 minutos exactos**. El reloj no se pausa.
+- **Los últimos 10 segundos** (2026-11-21, pedido del usuario "para darle intensidad al final"): un número grande de 10 a 1 sobre la cancha, solo el contorno en neón magenta (las letras se siguen leyendo y el trazo pasa por debajo), el reloj late en magenta y suena un tic-tac (`fx.countdown`, elegido por el usuario sobre un latido grave que en el parlante del celu casi no se oye), más agudo y fuerte en los últimos 3. El reloj redondea para arriba como el número: 0:00 recién al terminar.
 - **Las letras** están tapadas hasta que termina la cuenta regresiva: el que espera al rival no puede ir buscando palabras.
 - **Palabras:** valen las mismas que en los niveles (`isValid`) y suman los mismos puntos (`points`). Mínimo 3 letras.
 - **Bloqueo:** cada palabra la puede marcar **una sola persona**: la primera que la escribe en el servidor (§4.3).
@@ -33,6 +34,7 @@ Dos amigos, cada uno con su celu, juegan la misma cancha durante 5 minutos. Cada
 
 ## 3. Flujo del jugador
 
+0. **Invitación única** (2026-11-21, pedido del usuario): al abrir el juego, a quien ya está en el nivel 2 o más le sale una vez "⚔️ ¡Desafía a un amigo!" con **Desafiar** (arma el desafío) o **Ahora no**. No sale con un link de duelo ni a quien ya estuvo en uno (`wordini:duel-seen`).
 1. **Desafiar.** En el header aparece el botón ⚔️, al lado de `?` y 🔊. Al tocarlo:
    - se barren salas viejas (§4.5) y se crea una sala nueva;
    - se abre un diálogo con el link `…/?vs=K7QX2`, el botón **Compartir** (`navigator.share`, con el portapapeles como plan B, igual que `share()` hoy) y, en su propia línea, **"⏳ Esperando a tu rival"** latiendo, con el tiempo que lleva esperando;
