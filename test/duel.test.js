@@ -107,3 +107,13 @@ test('finalCount: 10…1 en los últimos 10 segundos, redondeando para arriba co
   assert.equal(finalCount(room, end - 1), 1);
   assert.equal(finalCount(room, end), null);
 });
+
+test('duelBoard: sin rarezas de los niveles (ni ?, ni letras al revés, ni candados, ni contramano, ni forma)', () => {
+  // A lock would never open (the duel has no single list of found words), and the rest isn't in the duel's rules
+  for (let created = 0; created < 40; created++) {
+    const b = duelBoard(newCode(() => (created * 0.137) % 1), { lang: 'es', created }, es);
+    assert.equal(b.shape, 'square');
+    assert.equal(b.size, 5);
+    for (const k of ['gold', 'hidden', 'flipped', 'locks', 'wrongWay']) assert.deepEqual(b[k], [], `${k} en la sala ${created}`);
+  }
+});
