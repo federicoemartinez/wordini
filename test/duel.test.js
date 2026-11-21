@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createBoard } from '../js/board.js';
-import { applyEvent, COUNTDOWN, duelBoard, halfway, LENGTH, newCode, other, phase, scores, timeLeft, turnOf, withPending, wordsOf } from '../js/duel.js';
+import { applyEvent, COUNTDOWN, duelBoard, halfway, LENGTH, newCode, other, phase, scores, timeLeft, turnOf, union, withPending, wordsOf } from '../js/duel.js';
 
 const es = JSON.parse(readFileSync(new URL('../words/es.json', import.meta.url), 'utf8'));
 
@@ -85,4 +85,13 @@ test('withPending: las palabras en camino suman, pero manda el servidor y la sal
   assert.deepEqual(room.words, { SOL: 'b', MAR: 'a' });
   assert.deepEqual(withPending({ lang: 'es' }, new Set(['PAN']), 'b').words, { PAN: 'b' });
   assert.deepEqual(withPending(room, new Set(), 'a'), room);
+});
+
+test('union: lo que llega se suma en cualquier orden (las palabras no cambian de dueño)', () => {
+  const stream = { lang: 'es', joined: 5, words: { SOL: 'b', CASA: 'a' } };
+  const poll = { lang: 'es', joined: 5, words: { SOL: 'b', MAR: 'b' } };
+  const all = { lang: 'es', joined: 5, words: { SOL: 'b', CASA: 'a', MAR: 'b' } };
+  assert.deepEqual(union(stream, poll), all);
+  assert.deepEqual(union(poll, stream), all);
+  assert.deepEqual(union({ lang: 'es', created: 1 }, { lang: 'es', created: 1, joined: 9 }), { lang: 'es', created: 1, joined: 9, words: {} });
 });

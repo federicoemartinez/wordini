@@ -153,6 +153,8 @@ Qué garantizan:
    - **200:** listo.
    - **Rechazo de las reglas** (el rival la marcó un instante antes, dentro de lo que tarda el stream, o llegó fuera de hora): se descuenta y sale 🔒.
    - **Error de red o sin respuesta en 8 s:** se descuenta y sale "📶 sin conexión". No se reintenta.
+4. **La sala solo crece** (2026-11-21, después de que el usuario vio en Firefox que se le borraban sus propias palabras y aparecía un 🔒 falso): una palabra nunca cambia de dueño y en la partida no se borra nada, así que todo lo que llega (el stream, el 200 de un `PUT`, una consulta) se **suma** a la sala (`union`), en cualquier orden. Un 200 la deja como tuya sin esperar al stream; un rechazo pregunta la sala antes de decir 🔒, porque "ya existe" no dice de quién.
+5. **El stream es solo la vía rápida:** en el Firefox del usuario se cortaba sin avisar (no se reprodujo en uno limpio). Cada 3 s, con la pestaña visible y hasta el final, se pide la sala entera; así igual aparecen las palabras del rival y su llegada.
 
 ### 4.4 Reloj
 

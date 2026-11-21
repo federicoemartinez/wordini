@@ -1,6 +1,6 @@
 import { closed, createBoard, isValid, pathFor, points, shown, turnBoard } from './board.js';
 import { define } from './define.js';
-import { applyEvent, claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, withPending, wordsOf } from './duel.js';
+import { applyEvent, claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, union, withPending, wordsOf } from './duel.js';
 import { hint, newProgress, play, read, score, step, turn, wordOf } from './game.js';
 import { duelText, formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
@@ -471,8 +471,8 @@ async function enterDuel(code) {
 function onDuelRoom(d, room) {
   if (d !== duel || !board) return;
   if (!room) return d.ended || duelMessage('duelNoRoom');
-  d.room = room;
-  const { theirs } = scores(room, d.me);
+  d.room = union(d.room, room); // news only adds up: a late or stale one can't take anything away
+  const { theirs } = scores(d.room, d.me);
   if (theirs > d.theirs) pop(`+${theirs - d.theirs}`, $('#duel-rival'));
   d.theirs = theirs;
   renderDuel();
@@ -496,6 +496,7 @@ function renderDuelClock() {
   if (!room || !board) return;
   const now = serverNow();
   const ph = phase(room, now);
+  poll(duel, ph);
   $('#board').classList.toggle('veiled', ph === 'waiting' || ph === 'countdown');
   if (ph === 'waiting') {
     duel.waited = true;
@@ -510,6 +511,14 @@ function renderDuelClock() {
   if (now < halfway(room)) duel.live = true; // this phone saw the board before the turn: it gets the show
   else if (!duel.turned) turnDuel();
   if (ph === 'over') endDuel();
+}
+
+// The stream is the fast lane, but it can die without a word (seen in Firefox): every 3 s the whole room is asked
+// for too, so the rival's words and the rival's arrival show up anyway.
+function poll(d, ph) {
+  if (ph === 'over' || document.hidden || Date.now() - (d.polled ?? 0) < 3000) return;
+  d.polled = Date.now();
+  getRoom(d.code).then(r => onDuelRoom(d, r), () => {});
 }
 
 // Halfway through, the board turns or mirrors for both at once. A path in progress is dropped: its tiles moved.
@@ -570,9 +579,11 @@ async function duelSubmit(p) {
   } catch {
     got = null; // no connection
   }
+  if (got) d.room = union(d.room, { words: { [word]: d.me } }); // the server said yes: it's ours, whatever the stream says
+  // "Already taken" doesn't say by whom: a lost answer may have hidden that it was us. The server knows.
+  else if (got === false) await getRoom(d.code).then(r => r && (d.room = union(d.room, r)), () => {});
   d.pending.delete(word);
   if (d !== duel) return;
-  // Without an answer the word may still have made it: the stream says so, and then it counts (spec duelo §4.3)
   if (!got && d.room.words?.[word] !== d.me) duelNo(word, got === null ? 'duelOffline' : 'blocked');
   renderDuel();
 }

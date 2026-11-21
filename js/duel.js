@@ -20,6 +20,10 @@ export const duelBoard = (code, room, words) => ({ ...createBoard(room.lang, BIG
 export const other = me => (me === 'a' ? 'b' : 'a');
 export const wordsOf = (room, who) => Object.keys(room?.words ?? {}).filter(w => room.words[w] === who).sort();
 
+// Once on the server a word never changes hands, and nothing is deleted mid-game: whatever news arrives (the stream,
+// a poll, a PUT's answer) just adds up, in any order. No news can undo another.
+export const union = (a, b) => ({ ...a, ...b, words: { ...a?.words, ...b?.words } });
+
 // What a phone shows: the server's room plus its own words still on their way. The server wins: a word the rival got
 // there first is theirs. The room itself is left alone: it only ever mirrors the server.
 export const withPending = (room, pending, me) => ({ ...room, words: { ...Object.fromEntries([...pending].map(w => [w, me])), ...room?.words } });
