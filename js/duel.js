@@ -40,6 +40,12 @@ export function phase(room, now) {
 
 export const timeLeft = (room, now) => Math.max(0, Math.min(LENGTH, room.joined + COUNTDOWN + LENGTH - now));
 
+// The last 10 seconds, counted down 10…1 over the board (null before and at the end). Rounded up, like the clock.
+export function finalCount(room, now) {
+  const s = Math.ceil(timeLeft(room, now) / 1000);
+  return s >= 1 && s <= 10 ? s : null;
+}
+
 // At 2:30 the board turns or mirrors once, like from level 20. The symmetry (board.js turnCell) comes from the
 // room, so both players get the same one at the same time.
 export const halfway = room => room.joined + COUNTDOWN + LENGTH / 2;

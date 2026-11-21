@@ -87,6 +87,25 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 #duel-rival, #duel-rival .pop { color: var(--magenta); text-shadow: 0 0 8px var(--magenta); }
 /* Until the countdown ends nobody sees the letters */
 #board.veiled .tile { color: transparent; text-shadow: none; }
+/* The last 10 seconds (main.js renderDuelClock): the clock beats and a big outlined number counts down over the
+   board. Just the outline, so the letters underneath still read, and the trace goes through it */
+#duel-time.final { color: var(--magenta); text-shadow: 0 0 10px var(--magenta); animation: beat 1s infinite; }
+#board[data-final]::after {
+  content: attr(data-final);
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  font-size: 55cqi;
+  color: transparent;
+  -webkit-text-stroke: 1cqi var(--magenta);
+  filter: drop-shadow(0 0 6px var(--magenta)) drop-shadow(0 0 18px var(--magenta));
+  pointer-events: none;
+  animation: final 1s ease-out infinite;
+}
+@keyframes final { from { opacity: 1; transform: scale(1.35); } to { opacity: .45; transform: scale(1); } }
+@keyframes beat { 0% { transform: scale(1.3); } 40% { transform: scale(1); } }
 
 /* Word in progress and result on release */
 #word { min-height: 2.4rem; display: grid; place-items: center; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; text-wrap: balance; }

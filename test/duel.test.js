@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createBoard } from '../js/board.js';
-import { applyEvent, COUNTDOWN, duelBoard, halfway, LENGTH, newCode, other, phase, scores, timeLeft, turnOf, union, withPending, wordsOf } from '../js/duel.js';
+import { applyEvent, COUNTDOWN, duelBoard, finalCount, halfway, LENGTH, newCode, other, phase, scores, timeLeft, turnOf, union, withPending, wordsOf } from '../js/duel.js';
 
 const es = JSON.parse(readFileSync(new URL('../words/es.json', import.meta.url), 'utf8'));
 
@@ -94,4 +94,16 @@ test('union: lo que llega se suma en cualquier orden (las palabras no cambian de
   assert.deepEqual(union(stream, poll), all);
   assert.deepEqual(union(poll, stream), all);
   assert.deepEqual(union({ lang: 'es', created: 1 }, { lang: 'es', created: 1, joined: 9 }), { lang: 'es', created: 1, joined: 9, words: {} });
+});
+
+test('finalCount: 10…1 en los últimos 10 segundos, redondeando para arriba como el reloj; nada antes ni después', () => {
+  const room = { joined: 1000 };
+  const end = 1000 + COUNTDOWN + LENGTH;
+  assert.equal(finalCount(room, 1000), null); // en el 3-2-1
+  assert.equal(finalCount(room, end - 10_001), null);
+  assert.equal(finalCount(room, end - 10_000), 10);
+  assert.equal(finalCount(room, end - 9_999), 10);
+  assert.equal(finalCount(room, end - 9_000), 9);
+  assert.equal(finalCount(room, end - 1), 1);
+  assert.equal(finalCount(room, end), null);
 });

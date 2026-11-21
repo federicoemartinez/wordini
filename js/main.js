@@ -1,6 +1,6 @@
 import { closed, createBoard, isValid, pathFor, points, shown, turnBoard } from './board.js';
 import { define } from './define.js';
-import { applyEvent, claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, union, withPending, wordsOf } from './duel.js';
+import { applyEvent, claim, clockOffset, COUNTDOWN, create, duelBoard, finalCount, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, union, withPending, wordsOf } from './duel.js';
 import { hint, newProgress, play, read, score, step, turn, wordOf } from './game.js';
 import { duelText, formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
@@ -26,7 +26,7 @@ let since = null; // performance.now() since the clock started running; null = s
 let loadSeq = 0; // only the latest requested load may touch the screen
 let idleFrom = 0; // elapsed() at the last word found: after a minute without words the hint button nudges
 const meanings = new Map(); // `${lang}:${word}` -> meaning of a hint word; null while loading or if there's none
-let duel = null; // the 1-vs-1 in play: { code, me, room, pending, offset, theirs, waited, live, turned, ended, stop }; null in the levels
+let duel = null; // the 1-vs-1 in play: { code, me, room, pending, offset, theirs, waited, live, turned, final, ended, stop }; null in the levels
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -505,7 +505,13 @@ function renderDuelClock() {
   if (duel.waited) fx.gold(); // the rival just came in
   duel.waited = false;
   $('#dlg-duel').close();
-  $('#duel-time').textContent = `⏳ ${formatTime(timeLeft(room, now))}`;
+  $('#duel-time').textContent = `⏳ ${formatTime(Math.ceil(timeLeft(room, now) / 1000) * 1000)}`; // 0:00 only at the end
+  const s = finalCount(room, now); // the last 10 seconds: a big number over the board and a tic-tac (style.css)
+  $('#duel-time').classList.toggle('final', !!s);
+  if (s) $('#board').dataset.final = s;
+  else delete $('#board').dataset.final;
+  if (s && s !== duel.final) fx.countdown(s);
+  duel.final = s;
   if (ph === 'countdown') say(String(Math.ceil((room.joined + COUNTDOWN - now) / 1000)), 'count');
   else if ($('#word').className === 'count') say('');
   if (now < halfway(room)) duel.live = true; // this phone saw the board before the turn: it gets the show
@@ -549,6 +555,7 @@ function duelWaiting(now) {
 function duelMessage(key) {
   board = undefined; // the grid doesn't respond anymore
   $('#board').replaceChildren();
+  delete $('#board').dataset.final;
   $('#duel-hud').hidden = $('#found-box').hidden = true;
   say('');
   $('#duel-msg').textContent = t(lang, key);
@@ -663,6 +670,7 @@ async function offerDuel() {
 function leaveDuel() {
   duel?.stop?.();
   duel = null;
+  delete $('#board').dataset.final;
   $('#dlg-duel').close();
   $('#dlg-duel-end').close();
   $('#duel-hud').hidden = true;
