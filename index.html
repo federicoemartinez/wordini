@@ -34,15 +34,22 @@
   <header>
     <h1>WORDINI</h1>
     <select id="lang" data-label="language"></select>
+    <button id="btn-duel" class="icon" data-label="duel">⚔️</button>
     <button id="btn-help" class="icon" data-label="help">?</button>
     <button id="btn-mute" class="icon" data-label="mute">🔊</button>
   </header>
 
   <main>
+    <button id="btn-back-duel" data-t="backToDuel" hidden></button>
     <div id="hud">
       <div id="lvl"><span id="level"></span><span id="time"></span></div>
       <div id="bar"><div id="fill"></div><span id="score"></span></div>
       <span id="common"></span>
+    </div>
+    <div id="duel-hud" hidden>
+      <span id="duel-time"></span>
+      <span id="duel-me"><b></b></span>
+      <span id="duel-rival"><b></b></span>
     </div>
     <p id="word" aria-live="polite"></p>
     <div id="board"></div>
@@ -92,6 +99,41 @@
     <form method="dialog">
       <button data-t="keepPlaying"></button>
       <button id="btn-next-dlg" data-t="nextLevel"></button>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-invite">
+    <h2 data-t="inviteTitle"></h2>
+    <p data-t="inviteText"></p>
+    <form method="dialog">
+      <button data-t="notNow"></button>
+      <button type="button" id="btn-invite" data-t="inviteGo"></button>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-duel">
+    <h2 data-t="duelTitle"></h2>
+    <p id="duel-msg"></p>
+    <p id="duel-waiting" hidden><span data-t="duelWaiting"></span> <span id="duel-since"></span></p>
+    <div id="duel-invite" class="row">
+      <input id="duel-link" readonly>
+      <button id="btn-duel-share" data-t="share"></button>
+    </div>
+    <form method="dialog"><button type="button" id="btn-duel-back" data-t="back"></button></form>
+  </dialog>
+
+  <dialog id="dlg-duel-end">
+    <h2 id="duel-result"></h2>
+    <p id="duel-score"></p>
+    <p id="duel-ask" hidden></p>
+    <h3 data-t="yourWords"></h3>
+    <p id="duel-mine" class="words"></p>
+    <h3 data-t="theirWords"></h3>
+    <p id="duel-theirs" class="words"></p>
+    <div class="row"><button id="btn-duel-result" data-t="share"></button></div>
+    <form method="dialog">
+      <button type="button" id="btn-duel-leave" data-t="back"></button>
+      <button type="button" id="btn-rematch" data-t="rematch"></button>
     </form>
   </dialog>
 </body>

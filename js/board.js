@@ -1,7 +1,7 @@
 // Deterministic boards: the same (language, level) gives the same board in any browser. Spec §4.
 
 // Difficulty knobs (spec §4.6). Calibrate with `node tools/levels.mjs <lang>`.
-const BIG_FROM = 11; // from this level on the grid is 5×5
+export const BIG_FROM = 11; // from this level on the grid is 5×5
 const SHAPE_FROM = 40; // from this level on a board may be 6×6 or have a shape (pickShape)
 const minCommon = cells => (cells === 16 ? 25 : 2 * cells); // minimum common words per board: 4×4 25, 5×5 50
 const minLong = cells => (cells === 16 ? 6 : 7); // minimum length of the "prize word"
@@ -250,8 +250,8 @@ function pickShape(lang, level) {
   return { shape, rows: SHAPES[shape] };
 }
 
-export function createBoard(lang, level, words) {
-  const rand = mulberry32(fnv1a(`${lang}:${level}`));
+export function createBoard(lang, level, words, seed = `${lang}:${level}`) {
+  const rand = mulberry32(fnv1a(seed));
   const d = prepare(words);
   const { shape, rows } = pickShape(lang, level);
   const size = rows.length;

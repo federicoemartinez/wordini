@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatTime, levelResult, shareText } from '../js/share.js';
+import { duelText, formatTime, levelResult, shareText } from '../js/share.js';
 
 test('formatTime: minutos y segundos; horas solo si hacen falta', () => {
   assert.equal(formatTime(0), '0:00');
@@ -18,4 +18,10 @@ test('texto para compartir por idioma', () => {
 test('resultado del nivel: nivel, puntos, tiempo y pistas usadas, también cero', () => {
   assert.equal(levelResult('es', 14, 212, 151_000, 0), 'Nivel 14 · 212 pts · ⏱ 2:31 · 💡0');
   assert.equal(levelResult('fr', 2, 30, 61_000, 4), 'Niveau 2 · 30 pts · ⏱ 1:01 · 💡4');
+});
+
+test('texto del duelo: ganado, perdido o empate, sin palabras', () => {
+  assert.equal(duelText('es', 48, 31, 'https://x/?l=es'), 'Wordini ⚔️ 🇪🇸 · 🏆 48–31\nhttps://x/?l=es');
+  assert.equal(duelText('en', 12, 30, 'https://x/?l=en'), 'Wordini ⚔️ 🇬🇧 · 💀 12–30\nhttps://x/?l=en');
+  assert.equal(duelText('fr', 20, 20, 'https://x/?l=fr'), 'Wordini ⚔️ 🇫🇷 · 🤝 20–20\nhttps://x/?l=fr');
 });

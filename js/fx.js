@@ -47,6 +47,12 @@ export function wrongWay() {
   [1047, 784, 659, 523].forEach((f, k) => beep(f, 0.14, 'triangle', 0.3 + k * 0.07, 0.06));
 }
 
+// The duel's last 10 seconds: a clock's tic-tac, nothing like the tracing ticks. Higher and louder in the last 3.
+export function countdown(s) {
+  beep(s <= 3 ? (s % 2 ? 1320 : 1100) : s % 2 ? 990 : 740, 0.06, 'sine', 0, s <= 3 ? 0.2 : 0.12);
+  if (s <= 3) navigator.vibrate?.(40);
+}
+
 export function gold() {
   beep(1568, 0.2, 'triangle', 0.12, 0.06);
   beep(2093, 0.3, 'triangle', 0.2, 0.05);

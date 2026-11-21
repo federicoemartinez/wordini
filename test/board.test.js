@@ -270,3 +270,8 @@ test('solve y pathFor saltean los huecos', () => {
   assert.deepEqual(pathFor('CASA', letters), [0, 1, 4, 5]);
   assert.equal(pathFor('CASAS', letters), null);
 });
+
+test('la semilla por defecto es idioma:nivel; con otra semilla sale otra cancha', () => {
+  assert.deepEqual(createBoard('es', 7, words.es, 'es:7').letters, createBoard('es', 7, words.es).letters);
+  assert.notDeepEqual(createBoard('es', 7, words.es, 'duel:K7QX2').letters, createBoard('es', 7, words.es).letters);
+});

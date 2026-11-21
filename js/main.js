@@ -1,7 +1,8 @@
-import { closed, createBoard, pathFor, points, shown, turnBoard } from './board.js';
+import { closed, createBoard, isValid, pathFor, points, shown, turnBoard } from './board.js';
 import { define } from './define.js';
+import { applyEvent, claim, clockOffset, COUNTDOWN, create, duelBoard, finalCount, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, union, withPending, wordsOf } from './duel.js';
 import { hint, newProgress, play, read, score, step, turn, wordOf } from './game.js';
-import { formatTime, levelResult, shareText } from './share.js';
+import { duelText, formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
 import { get, set, loadGame, saveGame, sameBoard, sigOf } from './state.js';
 import * as fx from './fx.js';
@@ -25,6 +26,7 @@ let since = null; // performance.now() since the clock started running; null = s
 let loadSeq = 0; // only the latest requested load may touch the screen
 let idleFrom = 0; // elapsed() at the last word found: after a minute without words the hint button nudges
 const meanings = new Map(); // `${lang}:${word}` -> meaning of a hint word; null while loading or if there's none
+let duel = null; // the 1-vs-1 in play: { code, me, room, pending, offset, theirs, waited, live, turned, final, ended, stop }; null in the levels
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -43,19 +45,24 @@ async function start(newLang) {
   $('#lang').value = lang;
   renderTexts();
   say(t(lang, 'loading'));
-  let loaded;
-  try {
-    const res = await fetch(`words/${lang}.json`);
-    if (!res.ok) throw new Error(res.status);
-    loaded = await res.json();
-    if (!Array.isArray(loaded?.valid) || !Array.isArray(loaded?.common)) throw new Error('old format'); // e.g. the criptex one, cached
-  } catch {
-    if (seq === loadSeq) say(t(lang, 'loadError'));
-    return;
-  }
-  if (seq !== loadSeq) return; // the player switched language while loading
+  const loaded = await fetchWords(lang);
+  if (seq !== loadSeq) return; // the player switched language (or went into a duel) while loading
+  if (!loaded) return say(t(lang, 'loadError'));
   words = loaded;
   enterLevel(loadGame(storage, lang));
+}
+
+// The word list of `l`, or null if it couldn't be downloaded.
+async function fetchWords(l) {
+  try {
+    const res = await fetch(`words/${l}.json`);
+    if (!res.ok) throw new Error(res.status);
+    const loaded = await res.json();
+    if (!Array.isArray(loaded?.valid) || !Array.isArray(loaded?.common)) throw new Error('old format'); // e.g. the criptex one, cached
+    return loaded;
+  } catch {
+    return null;
+  }
 }
 
 function enterLevel(saved) {
@@ -76,13 +83,14 @@ function enterLevel(saved) {
   const news = [['mystery', board.hidden], ['lock', closed(board, game.found)]].find(([k, cells]) => cells.length && !get(storage, `wordini:${k}-seen`))?.[0];
   if (news) set(storage, `wordini:${news}-seen`, true);
   say(news ? t(lang, news) : '', 'note');
+  offerDuel();
 }
 
 // The clock runs from when the board is shown until it's cleared, and only while the tab is visible.
 const elapsed = () => game.ms + (since === null ? 0 : performance.now() - since);
 
 function startClock() {
-  if (since === null && !game.passed && !document.hidden) since = performance.now();
+  if (game && since === null && !game.passed && !document.hidden) since = performance.now(); // no game: in a duel
 }
 
 // Folds the elapsed time into game.ms (what gets saved) without stopping the clock.
@@ -100,6 +108,7 @@ function stopClock() {
 }
 
 function renderClock() {
+  if (duel) return renderDuelClock();
   if (!game) return;
   $('#time').textContent = `⏱ ${formatTime(elapsed())}`;
   $('#btn-hint').classList.toggle('nudge', !game.hint && !$('#btn-hint').disabled && elapsed() - idleFrom > 60_000);
@@ -164,15 +173,7 @@ function render() {
     tile.classList.toggle('locked', shut.includes(k.cell)); // .locked can't be touched (style.css): the trace skips it
     tile.querySelector('.badge').textContent = `🔒${k.at + k.need - game.found.length}`;
   }
-  const lengths = [...new Set(game.found.map(w => w.length))].sort((a, b) => b - a);
-  $('#found-title').textContent = `${t(lang, 'found')} (${game.found.length})`;
-  $('#found').replaceChildren(
-    ...lengths.map(n => {
-      const p = document.createElement('p');
-      p.append(Object.assign(document.createElement('b'), { textContent: n }), game.found.filter(w => w.length === n).sort().join(' '));
-      return p;
-    }),
-  );
+  renderFound(game.found);
   const h = game.hint;
   const lit = h ? h.path.slice(0, h.shown) : [];
   board.letters.forEach((_, i) => $('#board').children[i].classList.toggle('hint', lit.includes(i)));
@@ -189,6 +190,19 @@ function render() {
   $('#btn-hint').disabled = h ? h.shown >= h.path.length - 2 : !missed.length;
   $('#btn-next').hidden = !game.passed;
   renderClock();
+}
+
+// Found words under the grid, longest first.
+function renderFound(found) {
+  const lengths = [...new Set(found.map(w => w.length))].sort((a, b) => b - a);
+  $('#found-title').textContent = `${t(lang, 'found')} (${found.length})`;
+  $('#found').replaceChildren(
+    ...lengths.map(n => {
+      const p = document.createElement('p');
+      p.append(Object.assign(document.createElement('b'), { textContent: n }), found.filter(w => w.length === n).sort().join(' '));
+      return p;
+    }),
+  );
 }
 
 // Meaning of a hint word: asks Wiktionary the first time and renders again if it answers.
@@ -210,20 +224,21 @@ function renderPath() {
   tiles.forEach((tile, i) => tile.classList.toggle('on', path.includes(i)));
   const centers = path.map(i => `${tiles[i].offsetLeft + tiles[i].offsetWidth / 2},${tiles[i].offsetTop + tiles[i].offsetHeight / 2}`);
   line.setAttribute('points', centers.join(' '));
-  if (path.length || typed) say(typed || shownWord(read(board, game.found, path)), 'live');
+  if (path.length || typed) say(typed || shownWord(read(board, game?.found ?? [], path)), 'live'); // no game: a duel, which has no wrong way
 }
 
-function pop(text) {
+function pop(text, where = $('#bar')) {
   const el = Object.assign(document.createElement('span'), { className: 'pop', textContent: text });
-  $('#bar').append(el);
+  where.append(el);
   setTimeout(() => el.remove(), 900);
 }
 
 const pendingGold = () => board.gold.filter((_, k) => game.goldLeft[k] > 0).map(g => g.cell);
-const typedPath = () => pathFor(typed, shown(board), pendingGold(), closed(board, game.found));
+const typedPath = () => pathFor(typed, shown(board), pendingGold(), closed(board, game?.found ?? [])); // a duel has no locks
 const shownWord = p => p.map(i => shown(board)[i]).join(''); // with "?": what the player sees, not the real word
 
 function submit(p) {
+  if (duel) return duelSubmit(p);
   const r = read(board, game.found, p); // before play: it changes found.length
   const word = wordOf(board, r);
   const goldBefore = game.goldLeft.join();
@@ -285,7 +300,7 @@ function tileAt(x, y) {
 
 function onPointerDown(e) {
   const tile = e.target.closest('.tile');
-  if (!board || !tile) return;
+  if (!board || !tile || !playable()) return;
   $('#board').setPointerCapture(e.pointerId);
   tracing = true;
   typed = '';
@@ -328,7 +343,7 @@ const letterOf = key => {
 };
 
 function onKey(e) {
-  if (!board || tracing || document.querySelector('dialog[open]') || e.target.tagName === 'SELECT') return;
+  if (!board || !playable() || tracing || document.querySelector('dialog[open]') || e.target.tagName === 'SELECT') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Enter' && !typed) return; // with nothing typed, Enter belongs to the focused link or button
   if (e.key === 'Enter') {
@@ -369,9 +384,10 @@ function nextLevel() {
   enterLevel({ level: game.level + 1 });
 }
 
-async function share() {
-  const url = `${location.origin}${location.pathname}?l=${lang}`;
-  const text = shareText(lang, game.level, score(game.found), game.ms, game.hints, url);
+const gameUrl = () => `${location.origin}${location.pathname}?l=${lang}`;
+
+// Native share sheet; without one, to the clipboard, and `btn` says so.
+async function share(text, btn) {
   if (navigator.share) {
     try {
       await navigator.share({ text });
@@ -382,11 +398,287 @@ async function share() {
   }
   try {
     await navigator.clipboard.writeText(text);
-    $('#btn-share').textContent = t(lang, 'copied');
-    setTimeout(() => ($('#btn-share').textContent = t(lang, 'share')), 1500);
+    btn.textContent = t(lang, 'copied');
+    setTimeout(() => (btn.textContent = t(lang, 'share')), 1500);
   } catch {
     prompt('', text); // no clipboard: let them copy it by hand
   }
+}
+
+// 1 vs 1 (spec duelo): same board for both, 5 minutes, each word only for whoever marks it first.
+const serverNow = () => Date.now() + duel.offset;
+const duelLink = code => `${location.origin}${location.pathname}?vs=${code}`;
+// Only the last duel's seat is kept: enough to come back to it after a reload.
+const seatIn = code => (get(storage, 'wordini:duel')?.code === code ? get(storage, 'wordini:duel').me : null);
+const seen = d => withPending(d.room, d.pending, d.me); // `room` mirrors the server, `pending` is ours on the way
+const playable = () => !duel || (!!duel.room && !duel.ended && phase(duel.room, serverNow()) === 'playing');
+
+async function challenge() {
+  if (duel) return;
+  $('#btn-duel').disabled = true;
+  try {
+    const code = await create(lang);
+    set(storage, 'wordini:duel', { code, me: 'a' });
+    enterDuel(code);
+  } catch {
+    say(t(lang, 'duelOffline'), 'invalid');
+  } finally {
+    $('#btn-duel').disabled = false;
+  }
+}
+
+async function enterDuel(code) {
+  ++loadSeq; // a level still loading must not take the screen
+  if (game) stopClock(); // the level's stopwatch waits for the duel
+  board = game = undefined;
+  set(storage, 'wordini:duel-seen', true); // whoever has been in a duel needs no invitation to one
+  const d = (duel = { code, me: seatIn(code), room: null, pending: new Set(), offset: 0, theirs: 0 });
+  history.replaceState(null, '', `?vs=${code}`);
+  $('#board').replaceChildren();
+  $('#board').classList.remove('wrong-way'); // the level's coral
+  $('#hud').hidden = $('#hint-row').hidden = $('#btn-next').hidden = $('#found-box').hidden = $('#btn-duel').hidden = $('#btn-back-duel').hidden = true;
+  $('#lang').disabled = true;
+  say(t(lang, 'loading'));
+  try {
+    const room = await getRoom(code);
+    if (d !== duel) return;
+    if (!room?.created) return duelMessage('duelNoRoom');
+    const loaded = await fetchWords(room.lang); // before taking the seat: joining starts the countdown
+    if (d !== duel) return;
+    if (!loaded) return duelMessage('loadError');
+    if (!d.me) {
+      if (room.joined || !(room.joined = await join(code))) return duelMessage('duelFull');
+      d.me = 'b';
+      set(storage, 'wordini:duel', { code, me: 'b' });
+    }
+    d.offset = await clockOffset(code, d.me);
+    if (d !== duel) return;
+    lang = room.lang;
+    words = loaded;
+    document.documentElement.lang = $('#lang').value = lang;
+    renderTexts();
+    board = duelBoard(code, room, words);
+    renderBoard();
+    say('');
+    d.room = room;
+    d.theirs = scores(room, d.me).theirs;
+    follow(d);
+    renderDuel();
+  } catch {
+    if (d === duel) duelMessage('duelOffline');
+  }
+}
+
+function onDuelRoom(d, room) {
+  if (d !== duel || !board) return;
+  if (!room) return d.ended || duelMessage('duelNoRoom');
+  d.room = union(d.room, room); // news only adds up: a late or stale one can't take anything away
+  const { theirs } = scores(d.room, d.me);
+  if (theirs > d.theirs) pop(`+${theirs - d.theirs}`, $('#duel-rival'));
+  d.theirs = theirs;
+  renderDuel();
+}
+
+function renderDuel() {
+  const room = seen(duel);
+  const { me } = duel;
+  const s = scores(room, me);
+  $('#duel-hud').hidden = $('#found-box').hidden = false;
+  $('#duel-me b').textContent = `${t(lang, 'you')} ${s.mine}`;
+  $('#duel-rival b').textContent = `${t(lang, 'rival')} ${s.theirs}`;
+  renderFound(wordsOf(room, me));
+  renderDuelClock();
+  if (duel.ended) renderDuelEnd();
+}
+
+// Every 250 ms: waiting room, 3-2-1, time left and the end. The server's time decides (spec duelo §4.4).
+function renderDuelClock() {
+  const { room } = duel;
+  if (!room || !board) return;
+  const now = serverNow();
+  const ph = phase(room, now);
+  poll(duel, ph);
+  $('#board').classList.toggle('veiled', ph === 'waiting' || ph === 'countdown');
+  if (ph === 'waiting') {
+    duel.waited = true;
+    return duelWaiting(now);
+  }
+  if (duel.waited) fx.gold(); // the rival just came in
+  duel.waited = false;
+  $('#dlg-duel').close();
+  $('#duel-time').textContent = `⏳ ${formatTime(Math.ceil(timeLeft(room, now) / 1000) * 1000)}`; // 0:00 only at the end
+  const s = finalCount(room, now); // the last 10 seconds: a big number over the board and a tic-tac (style.css)
+  $('#duel-time').classList.toggle('final', !!s);
+  if (s) $('#board').dataset.final = s;
+  else delete $('#board').dataset.final;
+  if (s && s !== duel.final) fx.countdown(s);
+  duel.final = s;
+  if (ph === 'countdown') say(String(Math.ceil((room.joined + COUNTDOWN - now) / 1000)), 'count');
+  else if ($('#word').className === 'count') say('');
+  if (now < halfway(room)) duel.live = true; // this phone saw the board before the turn: it gets the show
+  else if (!duel.turned) turnDuel();
+  if (ph === 'over') endDuel();
+}
+
+// The stream is the fast lane, but it can die without a word (seen in Firefox): every 3 s the whole room is asked
+// for too, so the rival's words and the rival's arrival show up anyway.
+function poll(d, ph) {
+  if (ph === 'over' || document.hidden || Date.now() - (d.polled ?? 0) < 3000) return;
+  d.polled = Date.now();
+  getRoom(d.code).then(r => onDuelRoom(d, r), () => {});
+}
+
+// Halfway through, the board turns or mirrors for both at once. A path in progress is dropped: its tiles moved.
+function turnDuel() {
+  const sym = turnOf(duel.room);
+  duel.turned = true;
+  board = turnBoard(board, sym);
+  tracing = false;
+  path = [];
+  typed = '';
+  renderBoard();
+  renderPath();
+  if (!duel.live) return; // opened after the turn: it's just drawn turned
+  say(t(lang, 'turned'), 'good');
+  fx.turn($('#board'), sym);
+}
+
+function duelWaiting(now) {
+  $('#duel-since').textContent = formatTime(now - duel.room.created);
+  if ($('#dlg-duel').open) return;
+  $('#duel-msg').textContent = t(lang, 'duelWait');
+  $('#duel-link').value = duelLink(duel.code);
+  $('#duel-invite').hidden = $('#duel-waiting').hidden = false;
+  $('#dlg-duel').showModal();
+}
+
+// The duel can't go on (no such room, it's full, no connection): a message and the way back.
+function duelMessage(key) {
+  board = undefined; // the grid doesn't respond anymore
+  $('#board').replaceChildren();
+  delete $('#board').dataset.final;
+  $('#duel-hud').hidden = $('#found-box').hidden = true;
+  say('');
+  $('#duel-msg').textContent = t(lang, key);
+  $('#duel-invite').hidden = $('#duel-waiting').hidden = true;
+  if (!$('#dlg-duel').open) $('#dlg-duel').showModal();
+}
+
+// A word in the duel counts at once; the server hears about it behind. If the rival marked it a moment earlier
+// (both within the time the stream takes), the server says no and it's taken back (spec duelo §4.3).
+async function duelSubmit(p) {
+  const d = duel;
+  const word = wordOf(board, p);
+  path = [];
+  typed = '';
+  renderPath();
+  if (word.length < 3) return say(p.length > 1 ? t(lang, 'short') : '', 'short');
+  const owner = seen(d).words[word];
+  if (!isValid(words, word)) return duelNo(word, 'invalid');
+  if (owner) return duelNo(word, owner === d.me ? 'dup' : 'blocked');
+  d.pending.add(word);
+  say(word, 'good');
+  pop(`+${points(word)}`, $('#duel-me'));
+  fx.good(word.length);
+  renderDuel();
+  let got;
+  try {
+    got = await claim(d.code, word, d.me);
+  } catch {
+    got = null; // no connection
+  }
+  if (got) d.room = union(d.room, { words: { [word]: d.me } }); // the server said yes: it's ours, whatever the stream says
+  // "Already taken" doesn't say by whom: a lost answer may have hidden that it was us. The server knows.
+  else if (got === false) await getRoom(d.code).then(r => r && (d.room = union(d.room, r)), () => {});
+  d.pending.delete(word);
+  if (d !== duel) return;
+  if (!got && d.room.words?.[word] !== d.me) duelNo(word, got === null ? 'duelOffline' : 'blocked');
+  renderDuel();
+}
+
+function duelNo(word, key) {
+  say(`${key === 'blocked' ? '🔒 ' : ''}${word} · ${t(lang, key)}`, key === 'dup' ? 'dup' : 'invalid');
+  fx.bad();
+}
+
+// Time's up. The result dialog comes back if it gets closed: after the end there's nothing else to do.
+function endDuel() {
+  if (!$('#dlg-duel-end').open) $('#dlg-duel-end').showModal();
+  if (duel.ended) return;
+  duel.ended = true;
+  tracing = false;
+  path = [];
+  typed = '';
+  renderPath();
+  say('');
+  const { mine, theirs } = scores(seen(duel), duel.me);
+  if (mine > theirs) fx.win();
+  renderDuelEnd();
+  // Once more after the server's 2 s of grace, in case the stream died: the result mustn't miss a word
+  const d = duel;
+  setTimeout(() => getRoom(d.code).then(r => onDuelRoom(d, r), () => {}), 2500);
+}
+
+// Drawn again when a last-second word or the rival's rematch arrives.
+function renderDuelEnd() {
+  const room = seen(duel);
+  const { me } = duel;
+  const { mine, theirs } = scores(room, me);
+  $('#duel-result').textContent = t(lang, mine > theirs ? 'won' : mine < theirs ? 'lost' : 'tie');
+  $('#duel-score').textContent = `${mine} – ${theirs}`;
+  $('#duel-mine').textContent = wordsOf(room, me).join(' ');
+  $('#duel-theirs').textContent = wordsOf(room, other(me)).join(' ');
+  $('#duel-ask').textContent = t(lang, 'rematchAsk');
+  $('#duel-ask').hidden = !room.next;
+}
+
+async function onRematch() {
+  const d = duel;
+  $('#btn-rematch').disabled = true; // a double tap would make two rooms
+  try {
+    const r = await rematch(d.code, lang, d.room.next);
+    if (d !== duel) return;
+    if (r.me === 'a') set(storage, 'wordini:duel', r);
+    d.stop();
+    $('#dlg-duel-end').close();
+    enterDuel(r.code);
+  } catch {
+    $('#duel-ask').textContent = t(lang, 'duelOffline');
+    $('#duel-ask').hidden = false;
+  } finally {
+    $('#btn-rematch').disabled = false;
+  }
+}
+
+// Streams the room. A hidden tab lets go of it: browsers allow 6 connections per server across all tabs, and
+// a few forgotten duel tabs would leave a new one with no stream. Coming back, Firebase sends the whole room.
+function follow(d) {
+  d.stop?.();
+  d.stop = listen(d.code, (type, e) => onDuelRoom(d, applyEvent(d.room, type, e)));
+}
+
+// From the levels: a way back to a duel of this phone that's still waiting or being played.
+async function offerDuel() {
+  const seat = get(storage, 'wordini:duel');
+  $('#btn-back-duel').hidden = true;
+  if (!seat) return;
+  const room = await getRoom(seat.code).catch(() => null);
+  if (duel || !room?.created || phase(room, Date.now()) === 'over') return;
+  $('#btn-back-duel').hidden = false;
+  $('#btn-back-duel').onclick = () => enterDuel(seat.code);
+}
+
+function leaveDuel() {
+  duel?.stop?.();
+  duel = null;
+  delete $('#board').dataset.final;
+  $('#dlg-duel').close();
+  $('#dlg-duel-end').close();
+  $('#duel-hud').hidden = true;
+  $('#board').classList.remove('veiled');
+  $('#lang').disabled = $('#btn-duel').hidden = false;
+  history.replaceState(null, '', location.pathname);
+  start(pickLang());
 }
 
 function renderMute() {
@@ -414,7 +706,22 @@ $('#btn-hint').onclick = () => {
   fx.tick(game.hint.shown);
   render();
 };
-$('#btn-share').onclick = share;
+$('#btn-share').onclick = e => share(shareText(lang, game.level, score(game.found), game.ms, game.hints, gameUrl()), e.target);
+$('#btn-duel').onclick = challenge;
+$('#btn-invite').onclick = () => {
+  $('#dlg-invite').close();
+  challenge();
+};
+$('#btn-duel-share').onclick = e => share(`${t(lang, 'duelInvite')} ${duelLink(duel.code)}`, e.target);
+$('#btn-duel-back').onclick = $('#btn-duel-leave').onclick = leaveDuel;
+$('#btn-rematch').onclick = onRematch;
+$('#btn-duel-result').onclick = e => {
+  const { mine, theirs } = scores(seen(duel), duel.me);
+  share(duelText(lang, mine, theirs, gameUrl()), e.target);
+};
+$('#dlg-duel').oncancel = $('#dlg-duel-end').oncancel = e => e.preventDefault(); // Esc doesn't leave: their buttons do
+// ...but a back gesture or a second Esc can still close it: an error message closed that way leaves too
+$('#dlg-duel').onclose = () => duel && !board && leaveDuel();
 $('#btn-mute').onclick = () => {
   fx.setMuted(!fx.muted);
   set(storage, 'wordini:muted', fx.muted);
@@ -423,6 +730,7 @@ $('#btn-mute').onclick = () => {
 document.addEventListener('keydown', onKey);
 for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, fx.unlock);
 document.addEventListener('visibilitychange', () => {
+  if (duel?.stop) document.hidden ? duel.stop() : follow(duel);
   if (!game) return;
   if (document.hidden) stopClock();
   else startClock();
@@ -430,9 +738,15 @@ document.addEventListener('visibilitychange', () => {
 addEventListener('pagehide', () => game && stopClock()); // fallback: some browsers don't fire visibilitychange on close
 setInterval(renderClock, 250);
 
-if (!get(storage, 'wordini:help-seen')) {
+const vs = new URLSearchParams(location.search).get('vs'); // a duel link (spec duelo §3)
+
+if (!vs && !get(storage, 'wordini:help-seen')) { // in a duel the 5 minutes are already running
   $('#dlg-help').showModal();
   set(storage, 'wordini:help-seen', true);
+} else if (!vs && !get(storage, 'wordini:duel-seen') && loadGame(storage, pickLang()).level >= 2) {
+  // Once, to someone who already plays: the duel exists (spec duelo §3)
+  $('#dlg-invite').showModal();
+  set(storage, 'wordini:duel-seen', true);
 }
 
 // Chrome (Android and desktop) fires this when the game can be installed as an app: our button instead of its banner
@@ -445,4 +759,9 @@ addEventListener('beforeinstallprompt', e => {
   };
 });
 navigator.serviceWorker?.register('sw.js'); // a new version shows up on the next load (see sw.js)
-start(pickLang()); // last: the controls already respond while the words download
+// Last: the controls already respond while the words download
+if (vs) {
+  lang = pickLang(); // texts while the room loads; then it's the room's language
+  renderTexts();
+  enterDuel(vs.toUpperCase());
+} else start(pickLang());

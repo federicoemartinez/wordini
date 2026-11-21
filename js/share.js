@@ -15,3 +15,7 @@ export const levelResult = (lang, level, pts, ms, hints) =>
 // Share text: the level result with ✅ after the level, no spoilers.
 export const shareText = (lang, level, pts, ms, hints, url) =>
   `Wordini ${FLAGS[lang]} · ${levelResult(lang, level, pts, ms, hints).replace(' · ', ' ✅ · ')}\n${url}`;
+
+// Duel result to share: 🏆, 💀 or 🤝 and the score, no words.
+export const duelText = (lang, mine, theirs, url) =>
+  `Wordini ⚔️ ${FLAGS[lang]} · ${mine > theirs ? '🏆' : mine < theirs ? '💀' : '🤝'} ${mine}–${theirs}\n${url}`;
