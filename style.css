@@ -265,7 +265,7 @@ dialog form { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 
 #clear-score { font-family: inherit; font-size: 1.1rem; color: var(--green); text-shadow: 0 0 8px var(--green); }
 #missed { font-size: .8rem; color: var(--muted); }
 #duel-link { flex: 1; min-width: 0; padding: .4rem; font: .85rem system-ui, sans-serif; color: var(--text); background: var(--bg); border: 1px solid var(--dim); border-radius: .4rem; }
-#btn-duel-share, #btn-duel-result, #btn-rematch { color: var(--green); border-color: var(--green); box-shadow: 0 0 6px var(--green); }
+#btn-duel-share, #btn-duel-result, #btn-rematch, #btn-invite { color: var(--green); border-color: var(--green); box-shadow: 0 0 6px var(--green); }
 #duel-result { color: var(--gold); text-shadow: 0 0 10px var(--gold); }
 #duel-score { font-family: inherit; font-size: 1.6rem; text-align: center; }
 #duel-ask { color: var(--green); text-shadow: 0 0 8px var(--green); }

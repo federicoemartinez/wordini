@@ -414,7 +414,7 @@ const seen = d => withPending(d.room, d.pending, d.me); // `room` mirrors the se
 const playable = () => !duel || (!!duel.room && !duel.ended && phase(duel.room, serverNow()) === 'playing');
 
 async function challenge() {
-  if (duel || !board) return;
+  if (duel) return;
   $('#btn-duel').disabled = true;
   try {
     const code = await create(lang);
@@ -431,6 +431,7 @@ async function enterDuel(code) {
   ++loadSeq; // a level still loading must not take the screen
   if (game) stopClock(); // the level's stopwatch waits for the duel
   board = game = undefined;
+  set(storage, 'wordini:duel-seen', true); // whoever has been in a duel needs no invitation to one
   const d = (duel = { code, me: seatIn(code), room: null, pending: new Set(), offset: 0, theirs: 0 });
   history.replaceState(null, '', `?vs=${code}`);
   $('#board').replaceChildren();
@@ -707,6 +708,10 @@ $('#btn-hint').onclick = () => {
 };
 $('#btn-share').onclick = e => share(shareText(lang, game.level, score(game.found), game.ms, game.hints, gameUrl()), e.target);
 $('#btn-duel').onclick = challenge;
+$('#btn-invite').onclick = () => {
+  $('#dlg-invite').close();
+  challenge();
+};
 $('#btn-duel-share').onclick = e => share(`${t(lang, 'duelInvite')} ${duelLink(duel.code)}`, e.target);
 $('#btn-duel-back').onclick = $('#btn-duel-leave').onclick = leaveDuel;
 $('#btn-rematch').onclick = onRematch;
@@ -738,6 +743,10 @@ const vs = new URLSearchParams(location.search).get('vs'); // a duel link (spec 
 if (!vs && !get(storage, 'wordini:help-seen')) { // in a duel the 5 minutes are already running
   $('#dlg-help').showModal();
   set(storage, 'wordini:help-seen', true);
+} else if (!vs && !get(storage, 'wordini:duel-seen') && loadGame(storage, pickLang()).level >= 2) {
+  // Once, to someone who already plays: the duel exists (spec duelo §3)
+  $('#dlg-invite').showModal();
+  set(storage, 'wordini:duel-seen', true);
 }
 
 // Chrome (Android and desktop) fires this when the game can be installed as an app: our button instead of its banner
