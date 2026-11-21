@@ -1,9 +1,14 @@
+/* Registered so the board can animate it into coral (wrong way) */
+@property --cyan { syntax: '<color>'; inherits: true; initial-value: #00e5ff; }
+
 :root {
   --bg: #0b0b14;
   --cyan: #00e5ff;
   --magenta: #ff2bd6;
   --green: #39ff88;
   --gold: #ffd23f;
+  --violet: #b26bff;
+  --coral: #ff8a3d;
   --dim: #3a3a55;
   --muted: #9a9ac0;
   --text: #ecebff;
@@ -84,10 +89,11 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 #board.veiled .tile { color: transparent; text-shadow: none; }
 
 /* Word in progress and result on release */
-#word { min-height: 2.4rem; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; }
+#word { min-height: 2.4rem; display: grid; place-items: center; margin: 0; font-size: 1.5rem; letter-spacing: .1em; text-align: center; text-wrap: balance; }
 #word.live { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
 #word.good { color: var(--green); text-shadow: 0 0 12px var(--green); animation: pulse .4s; }
 #word.dup { color: var(--gold); text-shadow: 0 0 10px var(--gold); font-size: 1.1rem; }
+#word.note { color: var(--violet); text-shadow: 0 0 8px var(--violet); font-family: system-ui, sans-serif; font-size: .9rem; letter-spacing: 0; }
 #word.invalid, #word.short { color: var(--magenta); text-shadow: 0 0 10px var(--magenta); font-size: 1.1rem; animation: shake .3s; }
 #word.count { font-size: 3rem; line-height: 2.4rem; color: var(--gold); text-shadow: 0 0 16px var(--gold); } /* as tall as the others: the board doesn't jump */
 @keyframes pulse { 50% { transform: scale(1.15); } }
@@ -101,12 +107,21 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
   aspect-ratio: 1;
   display: grid;
   grid-template-columns: repeat(var(--n), 1fr);
-  gap: .5rem;
+  grid-template-rows: repeat(var(--n), 1fr);
+  gap: min(.5rem, 2.5rem / var(--n)); /* .5rem up to 5×5, a bit tighter 6 and 7 wide */
   container-type: inline-size;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  transition: --cyan .6s;
 }
+/* Wrong way (game.js read): the board's cyan turns coral; buttons and bar stay cyan */
+#board.wrong-way { --cyan: var(--coral); }
+/* The diamond board (board.js SHAPES.tilt) is the 5×5 turned 45°, with letters and badges turned back. `rotate`, not
+   `transform`: fx.turn animates the transform of the board and its tiles, and .tile.on sets it. √2 narrower and with
+   room above and below, so its corners take the place of the usual square. */
+#board.tilt { rotate: 45deg; width: min(70.7%, 17rem); margin-block: min(14.6%, 3.5rem); }
+.tilt .tile > span, .tilt .badge { rotate: -45deg; }
 
 .tile {
   position: relative;
@@ -115,7 +130,7 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
   border: 2px solid var(--cyan);
   border-radius: .7rem;
   background: #15152c;
-  box-shadow: 0 0 6px var(--cyan), inset 0 0 10px #00e5ff33;
+  box-shadow: 0 0 6px var(--cyan), inset 0 0 10px color-mix(in srgb, var(--cyan) 20%, transparent);
   font-size: calc(100cqi / var(--n) * .42);
   text-shadow: 0 0 6px var(--cyan);
   cursor: pointer;
@@ -125,6 +140,17 @@ main { display: flex; flex-direction: column; align-items: center; gap: 1rem; ma
 .tile.gold { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 8px var(--gold), 0 0 18px var(--gold); text-shadow: 0 0 8px var(--gold); }
 .tile.gold.done { border-color: var(--green); color: var(--green); box-shadow: 0 0 8px var(--green); text-shadow: 0 0 8px var(--green); }
 .tile.gold.on { border-color: var(--magenta); }
+/* "?" tiles */
+.tile.mystery { border-color: var(--violet); color: var(--violet); box-shadow: 0 0 8px var(--violet), 0 0 18px var(--violet); text-shadow: 0 0 8px var(--violet); }
+.tile.mystery.on { border-color: var(--magenta); }
+/* Locks (board.js pickLocks): dimmed, untouchable and with what's left until they open */
+.tile.locked { border-style: dashed; border-color: #556; color: #667; box-shadow: none; text-shadow: none; pointer-events: none; }
+.tile.locked .badge { background: #ccd; box-shadow: 0 0 6px #ccd; }
+.tile.lock:not(.locked) .badge { display: none; }
+/* Letters drawn backwards (board.js pickFlipped) */
+.upside, .mirror { display: inline-block; }
+.upside { transform: rotate(180deg); }
+.mirror { transform: scaleX(-1); }
 /* Hint tiles: a blinking outline, so it doesn't fight the border/shadow of .on and .gold */
 .tile.hint { outline: 2px solid var(--green); outline-offset: 2px; animation: blink .8s infinite alternate; }
 @keyframes blink { to { outline-color: transparent; } }

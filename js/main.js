@@ -1,7 +1,7 @@
-import { createBoard, isValid, pathFor, points, turnBoard } from './board.js';
+import { closed, createBoard, isValid, pathFor, points, shown, turnBoard } from './board.js';
 import { define } from './define.js';
 import { claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, wordsOf } from './duel.js';
-import { hint, newProgress, play, score, step, turn, wordOf } from './game.js';
+import { hint, newProgress, play, read, score, step, turn, wordOf } from './game.js';
 import { duelText, formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
 import { get, set, loadGame, saveGame, sameBoard, sigOf } from './state.js';
@@ -79,7 +79,10 @@ function enterLevel(saved) {
   startClock(); // from the moment the board is visible: otherwise you could study it for free
   renderBoard();
   render();
-  say('');
+  // Each kind of special tile is explained the first time it shows up; then it's in the help
+  const news = [['mystery', board.hidden], ['lock', closed(board, game.found)]].find(([k, cells]) => cells.length && !get(storage, `wordini:${k}-seen`))?.[0];
+  if (news) set(storage, `wordini:${news}-seen`, true);
+  say(news ? t(lang, news) : '', 'note');
   offerDuel();
 }
 
@@ -129,18 +132,23 @@ function say(text, cls = '') {
 function renderBoard() {
   const el = $('#board');
   el.style.setProperty('--n', board.size);
+  el.classList.toggle('tilt', board.shape === 'tilt');
   el.replaceChildren(
-    ...board.letters.map((c, i) => {
-      const tile = Object.assign(document.createElement('div'), { className: 'tile', textContent: c });
+    ...shown(board).map((c, i) => {
+      if (c === null) return Object.assign(document.createElement('div'), { className: 'hole' }); // keeps its place in the grid
+      const tile = Object.assign(document.createElement('div'), { className: c === '?' ? 'tile mystery' : 'tile' });
       tile.dataset.i = i;
+      // The letter in a span, so it can be flipped, or kept upright on the tilted board, without touching the tile
+      // (fx.turn animates the tile, and the hint arrow goes in it)
+      tile.append(Object.assign(document.createElement('span'), { textContent: c }));
       return tile;
     }),
     trail,
   );
-  for (const g of board.gold) {
-    el.children[g.cell].classList.add('gold');
-    el.children[g.cell].append(Object.assign(document.createElement('b'), { className: 'badge' }));
-  }
+  for (const f of board.flipped) el.children[f.cell].firstChild.className = f.flip;
+  for (const g of board.gold) el.children[g.cell].classList.add('gold');
+  for (const k of board.locks) el.children[k.cell].classList.add('lock');
+  for (const c of [...board.gold, ...board.locks]) el.children[c.cell].append(Object.assign(document.createElement('b'), { className: 'badge' }));
   line.setAttribute('points', '');
 }
 
@@ -152,12 +160,19 @@ function render() {
   $('#score').textContent = `${pts} / ${board.threshold}`;
   $('#fill').style.width = `${Math.min(100, (100 * pts) / board.threshold)}%`;
   $('#bar').classList.toggle('done', pts >= board.threshold);
+  $('#board').classList.toggle('wrong-way', board.wrongWay.includes(game.found.length)); // coral (style.css)
   $('#common').textContent = `${board.commonCount - missed.length}/${board.commonCount} ${t(lang, 'common')}`;
   board.gold.forEach((g, k) => {
     const tile = $('#board').children[g.cell];
     tile.classList.toggle('done', game.goldLeft[k] === 0);
     tile.querySelector('.badge').textContent = game.goldLeft[k] || '✓';
   });
+  const shut = closed(board, game.found);
+  for (const k of board.locks) {
+    const tile = $('#board').children[k.cell];
+    tile.classList.toggle('locked', shut.includes(k.cell)); // .locked can't be touched (style.css): the trace skips it
+    tile.querySelector('.badge').textContent = `🔒${k.at + k.need - game.found.length}`;
+  }
   renderFound(game.found);
   const h = game.hint;
   const lit = h ? h.path.slice(0, h.shown) : [];
@@ -170,7 +185,7 @@ function render() {
     arrow.style.setProperty('--a', `${deg}deg`);
     $('#board').children[c].append(arrow);
   });
-  $('#hint').textContent = h ? h.path.map((c, i) => (i < h.shown ? board.letters[c] : '_')).join(' ') : '';
+  $('#hint').textContent = h ? h.path.map((c, i) => (i < h.shown ? shown(board)[c] : '_')).join(' ') : '';
   $('#meaning').textContent = (h && meaning(wordOf(board, h.path))) || '';
   $('#btn-hint').disabled = h ? h.shown >= h.path.length - 2 : !missed.length;
   $('#btn-next').hidden = !game.passed;
@@ -205,11 +220,11 @@ function meaning(word) {
 
 // Highlights the path, draws the line through the tile centers and shows the word in progress.
 function renderPath() {
-  const tiles = [...$('#board').querySelectorAll('.tile')];
+  const tiles = [...$('#board').children]; // by cell number, holes included (the trail comes last)
   tiles.forEach((tile, i) => tile.classList.toggle('on', path.includes(i)));
   const centers = path.map(i => `${tiles[i].offsetLeft + tiles[i].offsetWidth / 2},${tiles[i].offsetTop + tiles[i].offsetHeight / 2}`);
   line.setAttribute('points', centers.join(' '));
-  if (path.length || typed) say(typed || wordOf(board, path), 'live');
+  if (path.length || typed) say(typed || shownWord(read(board, game?.found ?? [], path)), 'live'); // no game: a duel, which has no wrong way
 }
 
 function pop(text, where = $('#bar')) {
@@ -219,10 +234,13 @@ function pop(text, where = $('#bar')) {
 }
 
 const pendingGold = () => board.gold.filter((_, k) => game.goldLeft[k] > 0).map(g => g.cell);
+const typedPath = () => pathFor(typed, shown(board), pendingGold(), closed(board, game?.found ?? [])); // a duel has no locks
+const shownWord = p => p.map(i => shown(board)[i]).join(''); // with "?": what the player sees, not the real word
 
 function submit(p) {
   if (duel) return duelSubmit(p);
-  const word = wordOf(board, p);
+  const r = read(board, game.found, p); // before play: it changes found.length
+  const word = wordOf(board, r);
   const goldBefore = game.goldLeft.join();
   const result = play(game, board, words, p);
   path = [];
@@ -233,7 +251,7 @@ function submit(p) {
     return;
   }
   if (result === 'invalid' || result === 'dup') {
-    say(`${word} · ${t(lang, result)}`, result);
+    say(`${shownWord(r)} · ${t(lang, result)}`, result); // with the "?": a miss doesn't give the letter away
     fx.bad();
     return;
   }
@@ -243,15 +261,25 @@ function submit(p) {
   if (turned) board = turnBoard(board, game.turn);
   saveGame(storage, lang, game);
   idleFrom = elapsed();
-  say(turned ? `${word} · ${t(lang, 'turned')}` : word, 'good');
+  const shut = board.locks.filter(k => k.at && k.at === game.found.length); // this word closed them
+  const opened = board.locks.filter(k => k.at + k.need === game.found.length); // ...or opened them
+  const wrongWay = board.wrongWay.includes(game.found.length); // ...or the board just went wrong way
+  if (wrongWay && !get(storage, 'wordini:wrong-way-seen')) {
+    set(storage, 'wordini:wrong-way-seen', true);
+    say(t(lang, 'wrongWayNote'), 'note'); // the first time, how to get out of it instead of the word found
+  } else say([word, turned && t(lang, 'turned'), shut.length && t(lang, 'locked'), wrongWay && t(lang, 'wrongWay')].filter(Boolean).join(' · '), 'good');
   pop(`+${points(word)}`);
   fx.good(word.length);
-  if (game.goldLeft.join() !== goldBefore) fx.gold();
+  if (game.goldLeft.join() !== goldBefore || opened.length) fx.gold();
+  if (wrongWay) fx.wrongWay();
   if (turned) {
     renderBoard();
     fx.turn($('#board'), game.turn);
   }
   render();
+  for (const k of opened) fx.open($('#board').children[k.cell]);
+  for (const k of shut) fx.close($('#board').children[k.cell]);
+  if (shut.length) set(storage, 'wordini:lock-seen', true); // just explained: no need to say it again on entering a level
   if (result === 'cleared') {
     fx.win();
     const g = game;
@@ -259,14 +287,15 @@ function submit(p) {
   }
 }
 
-// Only each tile's central circle counts, so a diagonal doesn't grab a neighbor by mistake.
+// Only each tile's central circle counts, so a diagonal doesn't grab a neighbor by mistake. Its radius comes from
+// offsetWidth, the untransformed size: on the tilted board a tile's rect is √2 wider.
 function tileAt(x, y) {
   const tile = document.elementFromPoint(x, y)?.closest('#board .tile');
   if (!tile) return null;
   const r = tile.getBoundingClientRect();
   const dx = x - (r.left + r.width / 2);
   const dy = y - (r.top + r.height / 2);
-  return dx * dx + dy * dy <= (0.36 * r.width) ** 2 ? Number(tile.dataset.i) : null;
+  return dx * dx + dy * dy <= (0.36 * tile.offsetWidth) ** 2 ? Number(tile.dataset.i) : null;
 }
 
 function onPointerDown(e) {
@@ -305,6 +334,7 @@ function onPointerUp(e) {
 const LIGATURES = { Œ: 'OE', Æ: 'AE' }; // same as the word lists (tools/build_words.py)
 
 const letterOf = key => {
+  if (key === '?') return key; // to type a word through a "?" tile
   if (key.length !== 1) return null;
   const up = key.toUpperCase();
   if (LIGATURES[up]) return LIGATURES[up];
@@ -317,7 +347,7 @@ function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Enter' && !typed) return; // with nothing typed, Enter belongs to the focused link or button
   if (e.key === 'Enter') {
-    const p = pathFor(typed, board.letters, pendingGold());
+    const p = typedPath();
     if (p) submit(p);
     else {
       say(`${typed} · ${t(lang, typed.length < 3 ? 'short' : 'invalid')}`, 'invalid');
@@ -334,7 +364,7 @@ function onKey(e) {
   } else return;
   e.preventDefault();
   if (e.key === 'Enter') return;
-  path = pathFor(typed, board.letters, pendingGold()) ?? [];
+  path = typedPath() ?? [];
   renderPath();
   if (!typed) say('');
 }
@@ -403,6 +433,7 @@ async function enterDuel(code) {
   const d = (duel = { code, me: seatIn(code), room: null, offset: 0, theirs: 0 });
   history.replaceState(null, '', `?vs=${code}`);
   $('#board').replaceChildren();
+  $('#board').classList.remove('wrong-way'); // the level's coral
   $('#hud').hidden = $('#hint-row').hidden = $('#btn-next').hidden = $('#found-box').hidden = $('#btn-duel').hidden = $('#btn-back-duel').hidden = true;
   $('#lang').disabled = true;
   say(t(lang, 'loading'));
