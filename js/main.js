@@ -1,6 +1,6 @@
 import { closed, createBoard, isValid, pathFor, points, shown, turnBoard } from './board.js';
 import { define } from './define.js';
-import { claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, wordsOf } from './duel.js';
+import { applyEvent, claim, clockOffset, COUNTDOWN, create, duelBoard, getRoom, halfway, join, listen, other, phase, rematch, scores, timeLeft, turnOf, withPending, wordsOf } from './duel.js';
 import { hint, newProgress, play, read, score, step, turn, wordOf } from './game.js';
 import { duelText, formatTime, levelResult, shareText } from './share.js';
 import { FLAGS, t } from './i18n.js';
@@ -26,7 +26,7 @@ let since = null; // performance.now() since the clock started running; null = s
 let loadSeq = 0; // only the latest requested load may touch the screen
 let idleFrom = 0; // elapsed() at the last word found: after a minute without words the hint button nudges
 const meanings = new Map(); // `${lang}:${word}` -> meaning of a hint word; null while loading or if there's none
-let duel = null; // the 1-vs-1 in play: { code, me, room, offset, theirs, waited, live, turned, ended, stop }; null in the levels
+let duel = null; // the 1-vs-1 in play: { code, me, room, pending, offset, theirs, waited, live, turned, ended, stop }; null in the levels
 
 function pickLang() {
   const wanted = [new URLSearchParams(location.search).get('l'), get(storage, 'wordini:lang'), navigator.language?.slice(0, 2)];
@@ -410,6 +410,7 @@ const serverNow = () => Date.now() + duel.offset;
 const duelLink = code => `${location.origin}${location.pathname}?vs=${code}`;
 // Only the last duel's seat is kept: enough to come back to it after a reload.
 const seatIn = code => (get(storage, 'wordini:duel')?.code === code ? get(storage, 'wordini:duel').me : null);
+const seen = d => withPending(d.room, d.pending, d.me); // `room` mirrors the server, `pending` is ours on the way
 const playable = () => !duel || (!!duel.room && !duel.ended && phase(duel.room, serverNow()) === 'playing');
 
 async function challenge() {
@@ -430,7 +431,7 @@ async function enterDuel(code) {
   ++loadSeq; // a level still loading must not take the screen
   if (game) stopClock(); // the level's stopwatch waits for the duel
   board = game = undefined;
-  const d = (duel = { code, me: seatIn(code), room: null, offset: 0, theirs: 0 });
+  const d = (duel = { code, me: seatIn(code), room: null, pending: new Set(), offset: 0, theirs: 0 });
   history.replaceState(null, '', `?vs=${code}`);
   $('#board').replaceChildren();
   $('#board').classList.remove('wrong-way'); // the level's coral
@@ -478,7 +479,8 @@ function onDuelRoom(d, room) {
 }
 
 function renderDuel() {
-  const { room, me } = duel;
+  const room = seen(duel);
+  const { me } = duel;
   const s = scores(room, me);
   $('#duel-hud').hidden = $('#found-box').hidden = false;
   $('#duel-me b').textContent = `${t(lang, 'you')} ${s.mine}`;
@@ -554,10 +556,10 @@ async function duelSubmit(p) {
   typed = '';
   renderPath();
   if (word.length < 3) return say(p.length > 1 ? t(lang, 'short') : '', 'short');
-  const owner = d.room.words?.[word];
+  const owner = seen(d).words[word];
   if (!isValid(words, word)) return duelNo(word, 'invalid');
   if (owner) return duelNo(word, owner === d.me ? 'dup' : 'blocked');
-  (d.room.words ??= {})[word] = d.me;
+  d.pending.add(word);
   say(word, 'good');
   pop(`+${points(word)}`, $('#duel-me'));
   fx.good(word.length);
@@ -568,9 +570,10 @@ async function duelSubmit(p) {
   } catch {
     got = null; // no connection
   }
-  if (got || d !== duel) return;
-  if (d.room.words?.[word] === d.me) delete d.room.words[word]; // the stream may already have brought the rival's
-  duelNo(word, got === null ? 'duelOffline' : 'blocked');
+  d.pending.delete(word);
+  if (d !== duel) return;
+  // Without an answer the word may still have made it: the stream says so, and then it counts (spec duelo §4.3)
+  if (!got && d.room.words?.[word] !== d.me) duelNo(word, got === null ? 'duelOffline' : 'blocked');
   renderDuel();
 }
 
@@ -589,7 +592,7 @@ function endDuel() {
   typed = '';
   renderPath();
   say('');
-  const { mine, theirs } = scores(duel.room, duel.me);
+  const { mine, theirs } = scores(seen(duel), duel.me);
   if (mine > theirs) fx.win();
   renderDuelEnd();
   // Once more after the server's 2 s of grace, in case the stream died: the result mustn't miss a word
@@ -599,7 +602,8 @@ function endDuel() {
 
 // Drawn again when a last-second word or the rival's rematch arrives.
 function renderDuelEnd() {
-  const { room, me } = duel;
+  const room = seen(duel);
+  const { me } = duel;
   const { mine, theirs } = scores(room, me);
   $('#duel-result').textContent = t(lang, mine > theirs ? 'won' : mine < theirs ? 'lost' : 'tie');
   $('#duel-score').textContent = `${mine} – ${theirs}`;
@@ -631,7 +635,7 @@ async function onRematch() {
 // a few forgotten duel tabs would leave a new one with no stream. Coming back, Firebase sends the whole room.
 function follow(d) {
   d.stop?.();
-  d.stop = listen(d.code, r => onDuelRoom(d, r));
+  d.stop = listen(d.code, (type, e) => onDuelRoom(d, applyEvent(d.room, type, e)));
 }
 
 // From the levels: a way back to a duel of this phone that's still waiting or being played.
@@ -688,7 +692,7 @@ $('#btn-duel-share').onclick = e => share(`${t(lang, 'duelInvite')} ${duelLink(d
 $('#btn-duel-back').onclick = $('#btn-duel-leave').onclick = leaveDuel;
 $('#btn-rematch').onclick = onRematch;
 $('#btn-duel-result').onclick = e => {
-  const { mine, theirs } = scores(duel.room, duel.me);
+  const { mine, theirs } = scores(seen(duel), duel.me);
   share(duelText(lang, mine, theirs, gameUrl()), e.target);
 };
 $('#dlg-duel').oncancel = $('#dlg-duel-end').oncancel = e => e.preventDefault(); // Esc doesn't leave: their buttons do

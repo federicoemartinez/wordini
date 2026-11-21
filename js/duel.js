@@ -20,6 +20,10 @@ export const duelBoard = (code, room, words) => ({ ...createBoard(room.lang, BIG
 export const other = me => (me === 'a' ? 'b' : 'a');
 export const wordsOf = (room, who) => Object.keys(room?.words ?? {}).filter(w => room.words[w] === who).sort();
 
+// What a phone shows: the server's room plus its own words still on their way. The server wins: a word the rival got
+// there first is theirs. The room itself is left alone: it only ever mirrors the server.
+export const withPending = (room, pending, me) => ({ ...room, words: { ...Object.fromEntries([...pending].map(w => [w, me])), ...room?.words } });
+
 // Points only: that's what wins.
 export const scores = (room, me) => ({ mine: score(wordsOf(room, me)), theirs: score(wordsOf(room, other(me))) });
 
@@ -117,12 +121,11 @@ export async function rematch(code, lang, next) {
   return { code: next, me: 'b' };
 }
 
-// Streams the room: onRoom(room) on every change (null = it doesn't exist). EventSource reconnects by itself and
-// Firebase then sends the whole room again. Returns a function that stops it.
-export function listen(code, onRoom) {
-  let room = null;
+// Streams the room: onEvent(type, {path, data}) on every change, for applyEvent. EventSource reconnects by itself and
+// Firebase then sends the whole room again as a put at "/" (null = it doesn't exist). Returns a function that stops it.
+export function listen(code, onEvent) {
   const es = new EventSource(url(`rooms/${code}`));
-  for (const type of ['put', 'patch']) es.addEventListener(type, e => onRoom((room = applyEvent(room, type, JSON.parse(e.data)))));
-  es.addEventListener('cancel', () => onRoom(null));
+  for (const type of ['put', 'patch']) es.addEventListener(type, e => onEvent(type, JSON.parse(e.data)));
+  es.addEventListener('cancel', () => onEvent('put', { path: '/', data: null }));
   return () => es.close();
 }

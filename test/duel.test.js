@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createBoard } from '../js/board.js';
-import { applyEvent, COUNTDOWN, duelBoard, halfway, LENGTH, newCode, other, phase, scores, timeLeft, turnOf, wordsOf } from '../js/duel.js';
+import { applyEvent, COUNTDOWN, duelBoard, halfway, LENGTH, newCode, other, phase, scores, timeLeft, turnOf, withPending, wordsOf } from '../js/duel.js';
 
 const es = JSON.parse(readFileSync(new URL('../words/es.json', import.meta.url), 'utf8'));
 
@@ -76,4 +76,13 @@ test('wordsOf, other y scores (solo puntos: se gana por puntos)', () => {
   assert.equal(other('b'), 'a');
   assert.deepEqual(scores(room, 'a'), { mine: 3, theirs: 7 });
   assert.deepEqual(scores(room, 'b'), { mine: 7, theirs: 3 });
+});
+
+test('withPending: las palabras en camino suman, pero manda el servidor y la sala no se toca', () => {
+  const room = { lang: 'es', words: { SOL: 'b', MAR: 'a' } };
+  const seen = withPending(room, new Set(['CASA', 'SOL']), 'a');
+  assert.deepEqual(seen.words, { CASA: 'a', SOL: 'b', MAR: 'a' }); // SOL la marcó el rival primero
+  assert.deepEqual(room.words, { SOL: 'b', MAR: 'a' });
+  assert.deepEqual(withPending({ lang: 'es' }, new Set(['PAN']), 'b').words, { PAN: 'b' });
+  assert.deepEqual(withPending(room, new Set(), 'a'), room);
 });
